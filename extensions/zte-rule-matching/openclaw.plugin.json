@@ -1,0 +1,9 @@
+{
+  "id": "rule-matching",
+  "providers": [],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

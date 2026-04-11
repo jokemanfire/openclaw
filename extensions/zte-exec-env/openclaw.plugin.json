@@ -1,0 +1,8 @@
+{
+  "id": "exec-env",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

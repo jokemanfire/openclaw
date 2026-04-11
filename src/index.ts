@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/system/bin/env node
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { formatUncaughtError } from "./infra/errors.js";

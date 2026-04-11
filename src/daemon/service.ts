@@ -245,7 +245,7 @@ export function describeGatewayServiceRestart(
   };
 }
 
-type SupportedGatewayServicePlatform = "darwin" | "linux" | "win32";
+type SupportedGatewayServicePlatform = "darwin" | "linux" | "win32" | "android";
 
 const GATEWAY_SERVICE_REGISTRY: Record<SupportedGatewayServicePlatform, GatewayService> = {
   darwin: {
@@ -286,6 +286,27 @@ const GATEWAY_SERVICE_REGISTRY: Record<SupportedGatewayServicePlatform, GatewayS
     isLoaded: isScheduledTaskInstalled,
     readCommand: readScheduledTaskCommand,
     readRuntime: readScheduledTaskRuntime,
+  },
+  android: {
+    label: "Android Service",
+    loadedText: "running",
+    notLoadedText: "stopped",
+    stage: ignoreServiceWriteResult(async () => {
+      /* no-op */
+    }),
+    install: async () => {
+      /* no-op */
+    },
+    uninstall: async () => {
+      /* no-op */
+    },
+    stop: async () => {
+      /* no-op */
+    },
+    restart: async () => ({ outcome: "completed" as const }),
+    isLoaded: async () => true,
+    readCommand: async () => null,
+    readRuntime: async () => ({ pid: 0, startTime: 0 }),
   },
 };
 

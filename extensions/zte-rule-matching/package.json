@@ -1,0 +1,14 @@
+{
+  "name": "rule-matching",
+  "version": "1.0.0",
+  "description": "Rule matching plugin for OpenClaw",
+  "type": "module",
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}

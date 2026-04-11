@@ -1,0 +1,10 @@
+{
+  "name": "@openclaw/exec-env",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sets OPENCLAW_* environment variables on exec/bash tool calls",
+  "type": "module",
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
+}

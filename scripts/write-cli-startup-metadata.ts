@@ -6,6 +6,26 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { RootHelpRenderOptions } from "../src/cli/program/root-help.js";
 import type { OpenClawConfig } from "../src/config/config.js";
 
+/* Started by Cursor 10131309.A25680412 20260413104500001 */
+const WRITE_CLI_STARTUP_METADATA_DEBUG_RAW =
+  process.env.OPENCLAW_WRITE_CLI_STARTUP_METADATA_DEBUG?.toLowerCase() ?? "";
+const WRITE_CLI_STARTUP_METADATA_DEBUG =
+  WRITE_CLI_STARTUP_METADATA_DEBUG_RAW !== "0" &&
+  WRITE_CLI_STARTUP_METADATA_DEBUG_RAW !== "false";
+
+function debugLog(message: string, detail?: Record<string, unknown>): void {
+  if (!WRITE_CLI_STARTUP_METADATA_DEBUG) {
+    return;
+  }
+  const prefix = "[write-cli-startup-metadata]";
+  if (detail && Object.keys(detail).length > 0) {
+    console.error(prefix, message, detail);
+  } else {
+    console.error(prefix, message);
+  }
+}
+/* Ended by Cursor 10131309.A25680412 20260413104500001 */
+
 function dedupe(values: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -51,6 +71,15 @@ type BundledChannelCatalog = {
 
 type RootHelpRenderContext = Pick<RootHelpRenderOptions, "config" | "env">;
 
+/* Started by Cursor 10131309.A25680412 20260210133000888 */
+function copyHostLdLibraryPathInto(env: NodeJS.ProcessEnv): void {
+  const value = process.env.LD_LIBRARY_PATH;
+  if (value !== undefined && value !== "") {
+    env.LD_LIBRARY_PATH = value;
+  }
+}
+/* Ended by Cursor 10131309.A25680412 20260210133000888 */
+
 function resolveRootHelpBundleIdentity(
   distDirOverride: string = distDir,
 ): { bundleName: string; signature: string } | null {
@@ -61,6 +90,18 @@ function resolveRootHelpBundleIdentity(
       entry.endsWith(".js"),
   );
   if (!bundleName) {
+    /* Started by Cursor 10131309.A25680412 20260413103200888 */
+    debugLog("resolveRootHelpBundleIdentity: no root-help-*.js in dist", {
+      distDirOverride,
+      entries: (() => {
+        try {
+          return readdirSync(distDirOverride);
+        } catch (err) {
+          return { error: String(err) };
+        }
+      })(),
+    });
+    /* Ended by Cursor 10131309.A25680412 20260413103200888 */
     return null;
   }
   const bundlePath = path.join(distDirOverride, bundleName);
@@ -167,6 +208,9 @@ function createIsolatedRootHelpRenderContext(
     OPENCLAW_DISABLE_BUNDLED_PLUGINS: "",
     OPENCLAW_STATE_DIR: stateDir,
   };
+  /* Started by Cursor 10131309.A25680412 20260210133000888 */
+  copyHostLdLibraryPathInto(env);
+  /* Ended by Cursor 10131309.A25680412 20260210133000888 */
   const config: OpenClawConfig = {
     agents: {
       defaults: {
@@ -205,6 +249,13 @@ export async function renderBundledRootHelpText(
     `await mod.outputRootHelp(${JSON.stringify(renderOptions)});`,
     "process.exit(0);",
   ].join("\n");
+  /* Started by Cursor 10131309.A25680412 20260413103200888 */
+  debugLog("renderBundledRootHelpText: spawning node eval", {
+    cwd: _distDirOverride,
+    bundleName: bundleIdentity.bundleName,
+    moduleUrl,
+    timeoutMs: ROOT_HELP_RENDER_TIMEOUT_MS,
+  });
   const result = spawnSync(process.execPath, ["--input-type=module", "--eval", inlineModule], {
     cwd: _distDirOverride,
     encoding: "utf8",
@@ -212,15 +263,24 @@ export async function renderBundledRootHelpText(
     timeout: ROOT_HELP_RENDER_TIMEOUT_MS,
   });
   if (result.error) {
+    debugLog("renderBundledRootHelpText: spawn error", { message: String(result.error) });
     throw result.error;
   }
   if (result.status !== 0) {
     const stderr = result.stderr?.trim();
+    debugLog("renderBundledRootHelpText: non-zero exit", {
+      status: result.status,
+      signal: result.signal,
+      stderr: stderr ?? "(empty)",
+      stdoutTail: (result.stdout ?? "").slice(-2000),
+    });
     throw new Error(
       `Failed to render bundled root help from ${bundleIdentity.bundleName}` +
         (stderr ? `: ${stderr}` : result.signal ? `: terminated by ${result.signal}` : ""),
     );
   }
+  debugLog("renderBundledRootHelpText: ok", { stdoutChars: (result.stdout ?? "").length });
+  /* Ended by Cursor 10131309.A25680412 20260413103200888 */
   return result.stdout ?? "";
 }
 
@@ -242,6 +302,12 @@ function renderSourceRootHelpText(
     "process.stdout.write(output);",
     "process.exit(0);",
   ].join("\n");
+  /* Started by Cursor 10131309.A25680412 20260413103200888 */
+  debugLog("renderSourceRootHelpText: spawning node --import tsx", {
+    cwd: rootDir,
+    rootHelpTs: path.join(rootDir, "src/cli/program/root-help.ts"),
+    timeoutMs: ROOT_HELP_RENDER_TIMEOUT_MS,
+  });
   const result = spawnSync(
     process.execPath,
     ["--import", "tsx", "--input-type=module", "--eval", inlineModule],
@@ -253,15 +319,24 @@ function renderSourceRootHelpText(
     },
   );
   if (result.error) {
+    debugLog("renderSourceRootHelpText: spawn error", { message: String(result.error) });
     throw result.error;
   }
   if (result.status !== 0) {
     const stderr = result.stderr?.trim();
+    debugLog("renderSourceRootHelpText: non-zero exit", {
+      status: result.status,
+      signal: result.signal,
+      stderr: stderr ?? "(empty)",
+      stdoutTail: (result.stdout ?? "").slice(-2000),
+    });
     throw new Error(
       "Failed to render source root help" +
         (stderr ? `: ${stderr}` : result.signal ? `: terminated by ${result.signal}` : ""),
     );
   }
+  debugLog("renderSourceRootHelpText: ok", { stdoutChars: (result.stdout ?? "").length });
+  /* Ended by Cursor 10131309.A25680412 20260413103200888 */
   return result.stdout ?? "";
 }
 
@@ -329,6 +404,18 @@ export async function writeCliStartupMetadata(options?: {
   );
   const channelOptions = dedupe([...CORE_CHANNEL_ORDER, ...channelCatalog.ids]);
 
+  /* Started by Cursor 10131309.A25680412 20260413103200888 */
+  debugLog("writeCliStartupMetadata: start", {
+    resolvedDistDir,
+    resolvedOutputPath,
+    resolvedExtensionsDir,
+    bundledPluginsDir,
+    channelIds: channelCatalog.ids.length,
+    bundleIdentity: bundleIdentity
+      ? { bundleName: bundleIdentity.bundleName, signature: bundleIdentity.signature.slice(0, 12) }
+      : null,
+  });
+
   try {
     const existing = JSON.parse(readFileSync(resolvedOutputPath, "utf8")) as {
       rootHelpBundleSignature?: unknown;
@@ -344,18 +431,26 @@ export async function writeCliStartupMetadata(options?: {
       typeof existing.browserHelpText === "string" &&
       existing.browserHelpText.length > 0
     ) {
+      debugLog("writeCliStartupMetadata: skip (signatures unchanged)");
       return;
     }
   } catch {
     // Missing or malformed existing metadata means we should regenerate it.
+    debugLog("writeCliStartupMetadata: no valid existing metadata, will regenerate");
   }
 
   let rootHelpText: string;
   try {
     rootHelpText = await renderBundledRootHelpText(resolvedDistDir, renderContext);
-  } catch {
+    debugLog("writeCliStartupMetadata: used bundled root-help path");
+  } catch (err) {
+    debugLog("writeCliStartupMetadata: bundled path failed, falling back to source + tsx", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     rootHelpText = renderSourceRootHelpText(renderContext);
+    debugLog("writeCliStartupMetadata: used source root-help fallback");
   }
+  /* Ended by Cursor 10131309.A25680412 20260413103200888 */
   const browserHelpText = renderSourceBrowserHelpText(renderContext);
 
   mkdirSync(resolvedDistDir, { recursive: true });
@@ -376,6 +471,9 @@ export async function writeCliStartupMetadata(options?: {
     )}\n`,
     "utf8",
   );
+  /* Started by Cursor 10131309.A25680412 20260413103200888 */
+  debugLog("writeCliStartupMetadata: wrote", { resolvedOutputPath });
+  /* Ended by Cursor 10131309.A25680412 20260413103200888 */
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {
