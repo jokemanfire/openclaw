@@ -33,6 +33,9 @@ export function resolveMergedAssistantText(params: {
     if (previousText.startsWith(nextText) && !nextDelta) {
       return capLiveAssistantBuffer(previousText);
     }
+    if (!nextText.startsWith(previousText) && !previousText.startsWith(nextText)) {
+      return capLiveAssistantBuffer(nextText);
+    }
   }
   if (nextDelta) {
     return capLiveAssistantBuffer(previousText + nextDelta);
