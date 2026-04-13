@@ -471,6 +471,11 @@ export type GatewayServerOptions = {
    */
   tailscale?: import("../config/config.js").GatewayTailscaleConfig;
   /**
+   * Optional override for `resolveGatewayRuntimeConfig`; otherwise from getprop / env (see unix-config).
+   */
+  unixSocketPath?: string;
+  tcpSocketEnabled?: boolean;
+  /**
    * Test-only: allow canvas host startup even when NODE_ENV/VITEST would disable it.
    */
   allowCanvasHostInTests?: boolean;
@@ -704,10 +709,13 @@ export async function startGatewayServer(
       openResponsesEnabled: opts.openResponsesEnabled,
       auth: opts.auth,
       tailscale: opts.tailscale,
+      unixSocketPath: opts.unixSocketPath,
+      tcpSocketEnabled: opts.tcpSocketEnabled,
     });
   });
   const {
     bindHost,
+    unixSocketPath,
     controlUiEnabled,
     openAiChatCompletionsEnabled,
     openAiChatCompletionsConfig,
@@ -845,6 +853,7 @@ export async function startGatewayServer(
       cfg: cfgAtStart,
       bindHost,
       port,
+      unixSocketPath,
       controlUiEnabled,
       controlUiBasePath,
       controlUiRoot: controlUiRootState,
@@ -977,6 +986,7 @@ export async function startGatewayServer(
         wss,
         httpServer,
         httpServers,
+        unixSocketPath,
       })(opts);
     };
   let clearFallbackGatewayContextForServer = () => {};

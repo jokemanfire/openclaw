@@ -28,6 +28,7 @@ import {
   isLocalDirectRequest,
   type GatewayAuthResult,
   type ResolvedGatewayAuth,
+  type GatewayIncomingMessageListenTransport,
 } from "./auth.js";
 import { normalizeCanvasScopedUrl } from "./canvas-capability.js";
 import type { ControlUiRootState } from "./control-ui.js";
@@ -809,9 +810,16 @@ export function createGatewayHttpServer(opts: {
   return httpServer;
 }
 
+/** Set on upgrade `IncomingMessage` so `[ws]` logs can show unix vs TCP listener. */
+export type GatewayUpgradeRequest = GatewayIncomingMessageListenTransport;
+
 export function attachGatewayUpgradeHandler(opts: {
   httpServer: HttpServer;
   wss: WebSocketServer;
+  /** When false, gateway control WebSocket upgrades are not accepted (canvas upgrades may still apply). */
+  gatewayWebSocketEnabled?: boolean;
+  /** Which HTTP listener accepted this connection (Unix domain socket vs TCP). */
+  listenTransport?: "unix" | "tcp";
   canvasHost: CanvasHostHandler | null;
   clients: Set<GatewayWsClient>;
   preauthConnectionBudget: PreauthConnectionBudget;
@@ -825,6 +833,8 @@ export function attachGatewayUpgradeHandler(opts: {
   const {
     httpServer,
     wss,
+    gatewayWebSocketEnabled = true,
+    listenTransport,
     canvasHost,
     clients,
     preauthConnectionBudget,
@@ -871,6 +881,14 @@ export function attachGatewayUpgradeHandler(opts: {
         if (canvasHost.handleUpgrade(req, socket, head)) {
           return;
         }
+      }
+      if (!gatewayWebSocketEnabled) {
+        writeUpgradeAuthFailure(socket, { ok: false, reason: "unauthorized" });
+        socket.destroy();
+        return;
+      }
+      if (listenTransport) {
+        (req as GatewayUpgradeRequest).openclawGatewayListenTransport = listenTransport;
       }
       const preauthBudgetKey = resolveRequestClientIp(req, trustedProxies, allowRealIpFallback);
       if (url.pathname === VOICECLAW_REALTIME_PATH) {

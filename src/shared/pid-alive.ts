@@ -9,7 +9,7 @@ function isValidPid(pid: number): boolean {
  * Returns false on non-Linux platforms or if the proc file can't be read.
  */
 function isZombieProcess(pid: number): boolean {
-  if (process.platform !== "linux") {
+  if (process.platform !== "linux" && process.platform !== "android") {
     return false;
   }
   try {
@@ -45,7 +45,7 @@ export function isPidAlive(pid: number): boolean {
  * return different starttimes, the PID has been reused by a different process.
  */
 export function getProcessStartTime(pid: number): number | null {
-  if (process.platform !== "linux") {
+  if (process.platform !== "linux" && process.platform !== "android") {
     return null;
   }
   if (!isValidPid(pid)) {

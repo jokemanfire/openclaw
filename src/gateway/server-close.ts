@@ -1,3 +1,4 @@
+import { unlinkSync } from "node:fs";
 import type { Server as HttpServer } from "node:http";
 import type { WebSocketServer } from "ws";
 import { disposeRegisteredAgentHarnesses } from "../agents/harness/registry.js";
@@ -200,6 +201,9 @@ export function createGatewayCloseHandler(params: {
   wss: WebSocketServer;
   httpServer: HttpServer;
   httpServers?: HttpServer[];
+  // ZTE_ZP_10352809_UnixSocket_BEGIN
+  unixSocketPath?: string;
+  // ZTE_ZP_10352809_UnixSocket_END
 }) {
   return async (opts?: {
     reason?: string;
@@ -259,6 +263,20 @@ export function createGatewayCloseHandler(params: {
           warnings,
         );
       }
+
+      // ZTE_ZP_10352809_UnixSocket_BEGIN
+      // Clean up Unix socket file on shutdown
+      if (params.unixSocketPath) {
+        try {
+          unlinkSync(params.unixSocketPath);
+          shutdownLog.info(`cleaned up unix socket: ${params.unixSocketPath}`);
+        } catch (err) {
+          // File may not exist or may have already been cleaned up, ignore
+          shutdownLog.debug(`failed to cleanup unix socket (may not exist): ${String(err)}`);
+        }
+      }
+      // ZTE_ZP_10352809_UnixSocket_END
+
       if (params.bonjourStop) {
         await shutdownStep("bonjour", () => params.bonjourStop!(), warnings);
       }

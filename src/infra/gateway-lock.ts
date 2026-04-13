@@ -171,7 +171,7 @@ async function checkPortFree(port: number, host = "127.0.0.1"): Promise<boolean>
 }
 
 function defaultReadProcessCmdline(pid: number, platform: NodeJS.Platform): string[] | null {
-  if (platform === "linux") {
+  if (platform === "linux" || platform === "android") {
     return readLinuxCmdline(pid);
   }
   if (platform === "win32") {
@@ -201,9 +201,9 @@ async function resolveGatewayOwnerStatus(
     return "dead";
   }
 
-  // On Linux, an extra start-time comparison catches PID recycling even when
+  // On Linux/Android, an extra start-time comparison catches PID recycling even when
   // the replacement process also looks like a gateway (same argv shape).
-  if (platform === "linux") {
+  if (platform === "linux" || platform === "android") {
     const payloadStartTime = payload?.startTime;
     if (Number.isFinite(payloadStartTime)) {
       const currentStartTime = readLinuxStartTime(pid);
@@ -221,7 +221,7 @@ async function resolveGatewayOwnerStatus(
     // start-time), "unknown" lets the stale-lock heuristic eventually reclaim
     // very old locks. On win32/darwin/other, conservatively assume "alive" to
     // preserve single-instance guarantees when wmic/ps is unavailable.
-    return platform === "linux" ? "unknown" : "alive";
+    return platform === "linux" || platform === "android" ? "unknown" : "alive";
   }
   return isGatewayArgv(args) ? "alive" : "dead";
 }
@@ -272,7 +272,8 @@ export async function acquireGatewayLock(
   while (now() - startedAt < timeoutMs) {
     try {
       const handle = await fs.open(lockPath, "wx");
-      const startTime = platform === "linux" ? readLinuxStartTime(process.pid) : null;
+      const startTime =
+        platform === "linux" || platform === "android" ? readLinuxStartTime(process.pid) : null;
       const payload: LockPayload = {
         pid: process.pid,
         createdAt: new Date(now()).toISOString(),

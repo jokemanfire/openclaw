@@ -11,7 +11,7 @@ import { normalizeLowercaseStringOrEmpty } from "../../shared/string-coerce.js";
 import { truncateUtf16Safe } from "../../utils.js";
 import { isWebchatClient } from "../../utils/message-channel.js";
 import type { AuthRateLimiter } from "../auth-rate-limit.js";
-import type { ResolvedGatewayAuth } from "../auth.js";
+import type { ResolvedGatewayAuth, GatewayIncomingMessageListenTransport } from "../auth.js";
 import { resolvePreauthHandshakeTimeoutMs } from "../handshake-timeouts.js";
 import { isLoopbackAddress } from "../net.js";
 import { MAX_PAYLOAD_BYTES, MAX_PREAUTH_PAYLOAD_BYTES } from "../server-constants.js";
@@ -230,6 +230,8 @@ export function attachGatewayWsConnectionHandler(params: AttachGatewayWsConnecti
     let closed = false;
     const openedAt = Date.now();
     const connId = randomUUID();
+    const listenTransport = (upgradeReq as GatewayIncomingMessageListenTransport)
+      .openclawGatewayListenTransport;
     const { remoteAddr, remotePort, localAddr, localPort, endpoint } = resolveSocketAddress(socket);
     const preauthBudgetKey = (
       socket as WebSocket & {
@@ -262,7 +264,21 @@ export function attachGatewayWsConnectionHandler(params: AttachGatewayWsConnecti
       scheme: canvasHostScheme,
     });
 
-    logWs("in", "open", { connId, remoteAddr, remotePort, localAddr, localPort, endpoint });
+    logWs("in", "open", {
+      connId,
+      remoteAddr,
+      remotePort,
+      localAddr,
+      localPort,
+      endpoint,
+      listenTransport: listenTransport ?? "unknown",
+      listenLayer:
+        listenTransport === "unix"
+          ? "unix_socket_then_ws"
+          : listenTransport === "tcp"
+            ? "tcp_then_ws"
+            : "unknown",
+    });
     let handshakeState: "pending" | "connected" | "failed" = "pending";
     let holdsPreauthBudget = true;
     let closeCause: string | undefined;
@@ -413,6 +429,7 @@ export function attachGatewayWsConnectionHandler(params: AttachGatewayWsConnecti
         lastFrameMethod,
         lastFrameId,
         endpoint,
+        listenTransport: listenTransport ?? "unknown",
       });
       close();
     });
@@ -438,6 +455,7 @@ export function attachGatewayWsConnectionHandler(params: AttachGatewayWsConnecti
       socket,
       upgradeReq,
       connId,
+      listenTransport,
       remoteAddr,
       remotePort,
       localAddr,

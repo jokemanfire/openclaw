@@ -13,6 +13,7 @@ import {
   resolveActivePluginHttpRouteRegistry,
 } from "../plugins/runtime.js";
 import type { RuntimeEnv } from "../runtime.js";
+import { listenGatewayUnixSocket } from "../zte_modules/gateway/server/unixsocket-listen.js";
 import type { AuthRateLimiter } from "./auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "./auth.js";
 import type { ChatAbortControllerEntry } from "./chat-abort.js";
@@ -57,6 +58,8 @@ export async function createGatewayRuntimeState(params: {
   cfg: import("../config/config.js").OpenClawConfig;
   bindHost: string;
   port: number;
+  /** Present when the gateway listens on a Unix domain socket. */
+  unixSocketPath?: string;
   controlUiEnabled: boolean;
   controlUiBasePath: string;
   controlUiRoot?: ControlUiRootState;
@@ -130,6 +133,13 @@ export async function createGatewayRuntimeState(params: {
         });
         if (handler.rootDir) {
           canvasHost = handler;
+          const listenLabel =
+            params.bindHost === "unix" && params.unixSocketPath
+              ? `unix:${params.unixSocketPath}`
+              : `http://${params.bindHost}:${params.port}`;
+          params.logCanvas.info(
+            `canvas host mounted at ${listenLabel}${CANVAS_HOST_PATH}/ (root ${handler.rootDir})`,
+          );
         }
       } catch (err) {
         params.logCanvas.warn(`canvas host failed to start: ${String(err)}`);
@@ -191,31 +201,12 @@ export async function createGatewayRuntimeState(params: {
       );
     };
 
-    const bindHosts = await resolveGatewayListenHosts(params.bindHost);
-    if (!isLoopbackHost(params.bindHost)) {
-      params.log.warn(
-        "⚠️  Gateway is binding to a non-loopback address. " +
-          "Ensure authentication is configured before exposing to public networks.",
-      );
-    }
-    if (params.cfg.gateway?.controlUi?.dangerouslyAllowHostHeaderOriginFallback === true) {
-      params.log.warn(
-        "⚠️  gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback=true is enabled. " +
-          "Host-header origin fallback weakens origin checks and should only be used as break-glass.",
-      );
-    }
-    // Create WebSocketServer first (with noServer: true) so we can attach upgrade handlers
-    // before HTTP servers start listening. This prevents a race condition where connections
-    // arrive before the upgrade handler is attached, which causes silent 1006 errors.
-    const wss = new WebSocketServer({
-      noServer: true,
-      maxPayload: MAX_PREAUTH_PAYLOAD_BYTES,
-    });
-    const preauthConnectionBudget = createPreauthConnectionBudget();
-
     const httpServers: HttpServer[] = [];
     const httpBindHosts: string[] = [];
-    for (const _host of bindHosts) {
+    const unixSocketRequired = params.bindHost === "unix";
+
+    // Unix socket listener
+    if (params.unixSocketPath) {
       const httpServer = createGatewayHttpServer({
         canvasHost,
         clients,
@@ -234,12 +225,123 @@ export async function createGatewayRuntimeState(params: {
         getResolvedAuth: params.getResolvedAuth,
         rateLimiter: params.rateLimiter,
         getReadiness: params.getReadiness,
-        tlsOptions: params.gatewayTls?.enabled ? params.gatewayTls.tlsOptions : undefined,
+        tlsOptions: undefined,
       });
-      // Attach upgrade handler BEFORE listening to prevent race condition
+      try {
+        await listenGatewayUnixSocket({ httpServer, unixSocketPath: params.unixSocketPath });
+        httpServers.push(httpServer);
+        httpBindHosts.push(`unix:${params.unixSocketPath}`);
+        params.log.info(`gateway listening on unix:${params.unixSocketPath}`);
+      } catch (err) {
+        if (unixSocketRequired) {
+          throw err;
+        }
+        params.log.warn(
+          `gateway: failed to bind unix socket ${params.unixSocketPath} (${String(err)}); continuing with TCP only`,
+        );
+        try {
+          httpServer.close();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    // TCP listeners (when not Unix-only)
+    if (params.bindHost !== "unix") {
+      const bindHosts = await resolveGatewayListenHosts(params.bindHost);
+      if (!isLoopbackHost(params.bindHost)) {
+        params.log.warn(
+          "⚠️  Gateway is binding to a non-loopback address. " +
+            "Ensure authentication is configured before exposing to public networks.",
+        );
+      }
+      if (params.cfg.gateway?.controlUi?.dangerouslyAllowHostHeaderOriginFallback === true) {
+        params.log.warn(
+          "⚠️  gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback=true is enabled. " +
+            "Host-header origin fallback weakens origin checks and should only be used as break-glass.",
+        );
+      }
+      for (const host of bindHosts) {
+        const httpServer = createGatewayHttpServer({
+          canvasHost,
+          clients,
+          controlUiEnabled: params.controlUiEnabled,
+          controlUiBasePath: params.controlUiBasePath,
+          controlUiRoot: params.controlUiRoot,
+          openAiChatCompletionsEnabled: params.openAiChatCompletionsEnabled,
+          openAiChatCompletionsConfig: params.openAiChatCompletionsConfig,
+          openResponsesEnabled: params.openResponsesEnabled,
+          openResponsesConfig: params.openResponsesConfig,
+          strictTransportSecurityHeader: params.strictTransportSecurityHeader,
+          handleHooksRequest,
+          handlePluginRequest,
+          shouldEnforcePluginGatewayAuth,
+          resolvedAuth: params.resolvedAuth,
+          rateLimiter: params.rateLimiter,
+          getReadiness: params.getReadiness,
+          tlsOptions: params.gatewayTls?.enabled ? params.gatewayTls.tlsOptions : undefined,
+        });
+        try {
+          await listenGatewayHttpServer({
+            httpServer,
+            bindHost: host,
+            port: params.port,
+          });
+          httpServers.push(httpServer);
+          httpBindHosts.push(host);
+        } catch (err) {
+          if (host === bindHosts[0]) {
+            if (httpServers.length > 0) {
+              params.log.warn(
+                `gateway: failed to bind TCP ${host}:${params.port} (${String(err)}); other listeners still active`,
+              );
+              try {
+                httpServer.close();
+              } catch {
+                /* ignore */
+              }
+            } else {
+              throw err;
+            }
+          } else {
+            params.log.warn(
+              `gateway: failed to bind loopback alias ${host}:${params.port} (${String(err)})`,
+            );
+          }
+        }
+      }
+    }
+
+    const httpServer = httpServers[0];
+    if (!httpServer) {
+      throw new Error("Gateway HTTP server failed to start");
+    }
+    if (httpBindHosts.length > 0) {
+      params.log.info(
+        `gateway listen transports: ${httpBindHosts
+          .map((h) =>
+            h.startsWith("unix:")
+              ? `unix_socket=${h.slice("unix:".length)}`
+              : `tcp=${h}:${params.port}`,
+          )
+          .join(" | ")}`,
+      );
+    }
+
+    const wss = new WebSocketServer({
+      noServer: true,
+      maxPayload: MAX_PREAUTH_PAYLOAD_BYTES,
+    });
+    const preauthConnectionBudget = createPreauthConnectionBudget();
+    for (let i = 0; i < httpServers.length; i++) {
+      const hostLabel = httpBindHosts[i] ?? "";
+      const listenTransport = hostLabel.startsWith("unix:") ? "unix" : "tcp";
       attachGatewayUpgradeHandler({
-        httpServer,
+        httpServer: httpServers[i]!,
         wss,
+        gatewayWebSocketEnabled: true,
+        listenTransport,
         canvasHost,
         clients,
         preauthConnectionBudget,
@@ -248,51 +350,9 @@ export async function createGatewayRuntimeState(params: {
         rateLimiter: params.rateLimiter,
         log: params.log,
       });
-      httpServers.push(httpServer);
     }
-    const httpServer = httpServers[0];
-    if (!httpServer) {
-      throw new Error("Gateway HTTP server failed to start");
-    }
-    let startListeningPromise: Promise<void> | null = null;
-    const startListening = async (): Promise<void> => {
-      if (startListeningPromise) {
-        await startListeningPromise;
-        return;
-      }
-      startListeningPromise = (async () => {
-        for (const [index, host] of bindHosts.entries()) {
-          const server = httpServers[index];
-          if (!server) {
-            throw new Error(`Missing gateway HTTP server for bind host ${host}`);
-          }
-          try {
-            await listenGatewayHttpServer({
-              httpServer: server,
-              bindHost: host,
-              port: params.port,
-            });
-            httpBindHosts.push(host);
-          } catch (err) {
-            if (host === bindHosts[0]) {
-              throw err;
-            }
-            params.log.warn(
-              `gateway: failed to bind loopback alias ${host}:${params.port} (${String(err)})`,
-            );
-          }
-        }
-        if (httpBindHosts.length === 0) {
-          throw new Error("Gateway HTTP server failed to start");
-        }
-      })();
-      try {
-        await startListeningPromise;
-      } catch (err) {
-        startListeningPromise = null;
-        throw err;
-      }
-    };
+    // Servers are already bound during creation; startListening is a no-op.
+    const startListening = async (): Promise<void> => {};
     const agentRunSeq = new Map<string, number>();
     const dedupe = new Map<string, DedupeEntry>();
     const chatRunState = createChatRunState();

@@ -13,6 +13,7 @@ import {
 } from "./auth-rate-limit.js";
 import { type ResolvedGatewayAuth } from "./auth-resolve.js";
 import {
+  isLocalishHost,
   isLoopbackAddress,
   resolveRequestClientIp,
   isTrustedProxyAddress,
@@ -120,6 +121,28 @@ function resolveTailscaleClientIp(req?: IncomingMessage): string | undefined {
   });
 }
 
+/**
+ * Set on gateway HTTP upgrade requests by `attachGatewayUpgradeHandler` when the listener is
+ * Unix vs TCP. Used to treat Unix transports as same-host (no loopback IP on `req.socket`).
+ */
+export type GatewayIncomingMessageListenTransport = IncomingMessage & {
+  openclawGatewayListenTransport?: "unix" | "tcp";
+};
+
+function isLocalDirectUnixGatewayRequest(req: IncomingMessage, trustedProxies?: string[]): boolean {
+  const transport = (req as GatewayIncomingMessageListenTransport).openclawGatewayListenTransport;
+  if (transport !== "unix") {
+    return false;
+  }
+  const hasForwarded = Boolean(
+    req.headers?.["x-forwarded-for"] ||
+    req.headers?.["x-real-ip"] ||
+    req.headers?.["x-forwarded-host"],
+  );
+  const remoteIsTrustedProxy = isTrustedProxyAddress(req.socket?.remoteAddress, trustedProxies);
+  return isLocalishHost(req.headers?.host) && (!hasForwarded || remoteIsTrustedProxy);
+}
+
 export function hasForwardedRequestHeaders(req?: IncomingMessage): boolean {
   if (!req) {
     return false;
@@ -136,12 +159,18 @@ export function hasForwardedRequestHeaders(req?: IncomingMessage): boolean {
 
 export function isLocalDirectRequest(
   req?: IncomingMessage,
-  _trustedProxies?: string[],
+  trustedProxies?: string[],
   _allowRealIpFallback = false,
 ): boolean {
   if (!req) {
     return false;
   }
+
+  // Check Unix socket transport first
+  if (isLocalDirectUnixGatewayRequest(req, trustedProxies)) {
+    return true;
+  }
+
   if (!hasForwardedRequestHeaders(req)) {
     return isLoopbackAddress(req.socket?.remoteAddress);
   }

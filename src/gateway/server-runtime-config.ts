@@ -4,6 +4,7 @@ import type {
   GatewayTailscaleConfig,
 } from "../config/types.gateway.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { readGatewayUnixListenFromSystem } from "../zte_modules/gateway/server/unix-config.js";
 import {
   assertGatewayAuthConfigured,
   type ResolvedGatewayAuth,
@@ -22,6 +23,8 @@ import { mergeGatewayTailscaleConfig } from "./startup-auth.js";
 
 type GatewayRuntimeConfig = {
   bindHost: string;
+  /** Present when the gateway listens on a Unix domain socket. */
+  unixSocketPath?: string;
   controlUiEnabled: boolean;
   openAiChatCompletionsEnabled: boolean;
   openAiChatCompletionsConfig?: import("../config/types.gateway.js").GatewayHttpChatCompletionsConfig;
@@ -48,8 +51,45 @@ export async function resolveGatewayRuntimeConfig(params: {
   openResponsesEnabled?: boolean;
   auth?: GatewayAuthConfig;
   tailscale?: GatewayTailscaleConfig;
+  /**
+   * Optional overrides from `startGatewayServer` opts. When omitted, values come from
+   * {@link readGatewayUnixListenFromSystem} (`getprop usPath` / `getprop tcpEnabled`, or
+   * `OPENCLAW_GATEWAY_US_PATH` / `OPENCLAW_GATEWAY_TCP_ENABLED`). Not read from openclaw.json.
+   */
+  unixSocketPath?: string;
+  tcpSocketEnabled?: boolean;
 }): Promise<GatewayRuntimeConfig> {
   warnLegacyOpenClawEnvVars();
+
+  // Unix socket configuration
+  const sysUnix = readGatewayUnixListenFromSystem();
+
+  let unixSocketPath: string | undefined;
+  if (params.unixSocketPath !== undefined) {
+    const t = params.unixSocketPath.trim();
+    unixSocketPath = t.length > 0 ? t : undefined;
+  } else {
+    const s = sysUnix.usPath?.trim();
+    unixSocketPath = s && s.length > 0 ? s : undefined;
+  }
+
+  /**
+   * Parallel TCP alongside Unix.
+   * - Caller passed `unixSocketPath` but not `tcpSocketEnabled` → unix-only (tests / explicit embed API).
+   * - Path from getprop/env/defaults only → follow {@link readGatewayUnixListenFromSystem} (default tcp true).
+   */
+  let tcpSocketEnabledResolved: boolean;
+  if (params.tcpSocketEnabled !== undefined) {
+    tcpSocketEnabledResolved = params.tcpSocketEnabled === true;
+  } else if (params.unixSocketPath !== undefined) {
+    tcpSocketEnabledResolved = false;
+  } else if (sysUnix.tcpEnabled !== undefined) {
+    tcpSocketEnabledResolved = sysUnix.tcpEnabled === true;
+  } else {
+    tcpSocketEnabledResolved = false;
+  }
+
+  const tcpSocketEnabledWithUnix = Boolean(unixSocketPath) && tcpSocketEnabledResolved;
 
   // Tailscale serve/funnel hard-requires loopback.  When bind is not
   // explicitly set, we must resolve Tailscale mode *before* choosing the
@@ -62,6 +102,79 @@ export async function resolveGatewayRuntimeConfig(params: {
     bindExplicit ?? (tailscaleModeEarly !== "off" ? "loopback" : defaultGatewayBindMode());
   const customBindHost = params.cfg.gateway?.customBindHost;
   const bindHost = params.host ?? (await resolveGatewayBindHost(bindMode, customBindHost));
+
+  // Unix socket + parallel TCP branch
+  if (unixSocketPath && !tcpSocketEnabledWithUnix) {
+    // Unix socket only (no parallel TCP)
+    const controlUiEnabled =
+      params.controlUiEnabled ?? params.cfg.gateway?.controlUi?.enabled ?? true;
+    const openAiChatCompletionsConfig = params.cfg.gateway?.http?.endpoints?.chatCompletions;
+    const openAiChatCompletionsEnabled =
+      params.openAiChatCompletionsEnabled ?? openAiChatCompletionsConfig?.enabled ?? false;
+    const openResponsesConfig = params.cfg.gateway?.http?.endpoints?.responses;
+    const openResponsesEnabled =
+      params.openResponsesEnabled ?? openResponsesConfig?.enabled ?? false;
+    const strictTransportSecurityConfig =
+      params.cfg.gateway?.http?.securityHeaders?.strictTransportSecurity;
+    const strictTransportSecurityHeader =
+      strictTransportSecurityConfig === false
+        ? undefined
+        : typeof strictTransportSecurityConfig === "string" &&
+            strictTransportSecurityConfig.trim().length > 0
+          ? strictTransportSecurityConfig.trim()
+          : undefined;
+    const controlUiBasePath = normalizeControlUiBasePath(params.cfg.gateway?.controlUi?.basePath);
+    const controlUiRootRaw = params.cfg.gateway?.controlUi?.root;
+    const controlUiRoot =
+      typeof controlUiRootRaw === "string" && controlUiRootRaw.trim().length > 0
+        ? controlUiRootRaw.trim()
+        : undefined;
+    const tailscaleBase = params.cfg.gateway?.tailscale ?? {};
+    const tailscaleOverrides = params.tailscale ?? {};
+    const tailscaleConfig = mergeGatewayTailscaleConfig(tailscaleBase, tailscaleOverrides);
+    const tailscaleMode = tailscaleConfig.mode ?? "off";
+    const resolvedAuth = resolveGatewayAuth({
+      authConfig: params.cfg.gateway?.auth,
+      authOverride: params.auth,
+      env: process.env,
+      tailscaleMode,
+    });
+    const authMode: ResolvedGatewayAuth["mode"] = resolvedAuth.mode;
+    const hooksConfig = resolveHooksConfig(params.cfg);
+    const canvasHostEnabled =
+      process.env.OPENCLAW_SKIP_CANVAS_HOST !== "1" && params.cfg.canvasHost?.enabled !== false;
+
+    assertGatewayAuthConfigured(resolvedAuth, params.cfg.gateway?.auth);
+    if (tailscaleMode !== "off") {
+      throw new Error(
+        "gateway tailscale serve/funnel requires TCP; set getprop tcpEnabled true or OPENCLAW_GATEWAY_TCP_ENABLED=true alongside Unix socket, or clear usPath / OPENCLAW_GATEWAY_US_PATH for TCP only",
+      );
+    }
+
+    return {
+      bindHost: "unix",
+      unixSocketPath,
+      controlUiEnabled,
+      openAiChatCompletionsEnabled,
+      openAiChatCompletionsConfig: openAiChatCompletionsConfig
+        ? { ...openAiChatCompletionsConfig, enabled: openAiChatCompletionsEnabled }
+        : undefined,
+      openResponsesEnabled,
+      openResponsesConfig: openResponsesConfig
+        ? { ...openResponsesConfig, enabled: openResponsesEnabled }
+        : undefined,
+      strictTransportSecurityHeader,
+      controlUiBasePath,
+      controlUiRoot,
+      resolvedAuth,
+      authMode,
+      tailscaleConfig,
+      tailscaleMode,
+      hooksConfig,
+      canvasHostEnabled,
+    };
+  }
+
   if (bindMode === "loopback" && !isLoopbackHost(bindHost)) {
     throw new Error(
       `gateway bind=loopback resolved to non-loopback host ${bindHost}; refusing fallback to a network bind`,
@@ -167,6 +280,7 @@ export async function resolveGatewayRuntimeConfig(params: {
 
   return {
     bindHost,
+    unixSocketPath: tcpSocketEnabledWithUnix ? unixSocketPath : undefined,
     controlUiEnabled,
     openAiChatCompletionsEnabled,
     openAiChatCompletionsConfig: openAiChatCompletionsConfig

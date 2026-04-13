@@ -177,6 +177,8 @@ export type GatewayWsMessageHandlerParams = {
   socket: WebSocket;
   upgradeReq: IncomingMessage;
   connId: string;
+  /** From gateway HTTP listener: Unix socket vs TCP (for logs). */
+  listenTransport?: "unix" | "tcp";
   remoteAddr?: string;
   remotePort?: number;
   localAddr?: string;
@@ -221,6 +223,7 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
     socket,
     upgradeReq,
     connId,
+    listenTransport,
     remoteAddr,
     remotePort,
     localAddr,
@@ -1350,6 +1353,7 @@ export function attachGatewayWsMessageHandler(params: GatewayWsMessageHandlerPar
         setHandshakeState("connected");
         logWs("in", "connect", {
           connId,
+          listenTransport: listenTransport ?? "unknown",
           client: connectParams.client.id,
           clientDisplayName: connectParams.client.displayName,
           version: connectParams.client.version,
