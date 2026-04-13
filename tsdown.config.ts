@@ -325,6 +325,10 @@ function buildCoreDistEntries(): Record<string, string> {
     "plugins/runtime/index": "src/plugins/runtime/index.ts",
     "llm-slug-generator": "src/hooks/llm-slug-generator.ts",
     "mcp/plugin-tools-serve": "src/mcp/plugin-tools-serve.ts",
+    /* Started by Cursor 10131309.A25680412 20260413201600452 */
+    /* Stable path for packages/sqlite-vec/index.cjs (resolveAdapterModule). */
+    "lib/sqliteVecAdapter": "src/zte_wrappers/sqllite-vec-wrapper/sqliteVecAdapter.ts",
+    /* Ended by Cursor 10131309.A25680412 20260413201600452 */
   };
 }
 

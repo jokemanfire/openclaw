@@ -6,15 +6,12 @@ set -e
 # Ended by Cursor 10131309.A25680412 20260209150000888
 
 echo "=================================================="
-echo "🚀 开始构建 OpenClaw Android 纯净分发包 (终极版)..."
+echo "🚀 开始构建 OpenClaw Android "
 echo "=================================================="
 
 # 定义变量
 TMP_DIR="/data/local/tmp"
-SRC_TAR="openclaw.tar.gz"
-SRC_DIR="openclaw"
-OUT_DIR="android_clean_env"
-DIST_TAR="openclaw-android-clean.tar.gz"
+SRC_DIR="/data/openclaw/openclaw_run"
 
 NODE_BIN="/system_ext/bin/node"
 NODE_LIB="/system_ext/openclaw/nodejs"
@@ -107,11 +104,6 @@ PNPM_VER=$($PNPM_CMD -v)
 echo "📦 pnpm 版本: $PNPM_VER"
 
 # 3. 清理历史构建并解压源码
-echo "📦 正在清理旧目录并解压源码包..."
-rm -rf $SRC_DIR $OUT_DIR $DIST_TAR
-mkdir  $SRC_DIR
-tar zxvf  $SRC_TAR -C  $SRC_DIR
-
 
 if [ -f "$SRC_DIR/package.json" ]; then
     cd $SRC_DIR
@@ -130,6 +122,7 @@ sed -i "s/\"packageManager\".*/\"packageManager\": \"pnpm@${PNPM_VER}\",/" packa
 
 # 4. 安装依赖
 echo "🔄 开始安装依赖包..."
+export OPENCLAW_DISABLE_BUNDLED_PLUGIN_POSTINSTALL=1
 $PNPM_CMD install 
 echo "✅ 依赖包安装完成！"
 
@@ -147,9 +140,8 @@ echo "✅ 前端UI编译完成"
 
 # 7. 生成 bionic_patch
 echo "📝 生成 Android 专用补丁文件..."
-mkdir -p $TMP_DIR/$OUT_DIR
 
-cat << 'PATCHEOF' > $TMP_DIR/$OUT_DIR/bionic_patch.cjs
+cat << 'PATCHEOF' > $SRC_DIR/bionic_patch.cjs
 const os = require('os');
 os.networkInterfaces = () => ({
   'lo': [{ address: '127.0.0.1', netmask: '255.0.0.0', family: 'IPv4', mac: '00:00:00:00:00:00', internal: true }]
@@ -157,55 +149,14 @@ os.networkInterfaces = () => ({
 console.log('[System] Bionic network patch injected successfully.');
 PATCHEOF
 
-# 8. 一次性打包拷贝项目文件（不过滤）
-echo "📂 正在一次性拷贝项目文件（不过滤）..."
-mkdir -p "$TMP_DIR/$OUT_DIR/openclaw_run"
+echo "=================================================="
+echo "build-info: "
+cat /data/openclaw/openclaw_run/dist/build-info.json
+echo "=================================================="
 
-# Started by Cursor 10131309.A25680412 20260324172641001
-[ -d "$TMP_DIR/$OUT_DIR/openclaw_run" ] || { echo "❌ ERROR: target dir missing: $TMP_DIR/$OUT_DIR/openclaw_run"; exit 1; }
-cd "$SRC_WORK_DIR" || { echo "❌ ERROR: source dir missing: $SRC_WORK_DIR"; exit 1; }
-tar -cf - . | (cd "$TMP_DIR/$OUT_DIR/openclaw_run" && tar -xf -)
-# Ended by Cursor 10131309.A25680412 20260324172641001
+chown -R system:system dist-runtime dist
 
-# 拷贝 bionic_patch 到项目根目录
-cp $TMP_DIR/$OUT_DIR/bionic_patch.cjs $TMP_DIR/$OUT_DIR/openclaw_run/
+echo "重启 gateway"
+ps -A | grep openclaw | awk '{print $2}' | head -1 | xargs kill
 
 echo "🧩 项目文件组装完成！"
-
-# 9. 打包（不再包含 nodejs 二进制，目标手机已预装）
-echo "🗜️ 正在压缩生成最终分发包..."
-cd $TMP_DIR/$OUT_DIR
-tar -czvf $TMP_DIR/$DIST_TAR openclaw_run bionic_patch.cjs > /dev/null
-
-# 10. 收尾
-cd $TMP_DIR
-FINAL_SIZE=$(du -sh $DIST_TAR | cut -f1)
-echo "=================================================="
-echo "🎉 完美收工！OpenClaw 纯净分发包生成成功！"
-echo "📦 包路径: $TMP_DIR/$DIST_TAR"
-echo "📦 包大小: $FINAL_SIZE"
-echo "=================================================="
-echo ""
-echo "【分发到其他手机的步骤】"
-echo "（前提：目标手机已预装 node 到 /system_ext/openclaw/nodejs/）"
-echo ""
-echo "1. 从母机拉取:"
-echo "   adb pull $TMP_DIR/$DIST_TAR ."
-echo ""
-echo "2. 推送到目标手机:"
-echo "   adb push $DIST_TAR /data/openclaw/"
-echo ""
-echo "3. 在目标手机上部署:"
-echo "   adb shell"
-echo "   cd /data/openclaw/"
-echo "   rm -rf /data/openclaw/openclaw_run"
-echo "   tar -zxf /data/local/tmp/openclaw-android-clean.tar.gz -C /data/openclaw/"
-echo "   chown -R system:system /data/openclaw/openclaw_run"
-echo "4. 启动 OpenClaw:"
-echo "   export LD_LIBRARY_PATH=/system_ext/openclaw/nodejs"
-echo "   export TMPDIR=/data/local/tmp/faketmp"
-echo "   export HOME=/data/local/tmp/faketmp"
-echo "   mkdir -p /data/local/tmp/faketmp"
-echo "   cd /data/openclaw/openclaw_run"
-echo "   node --require ./bionic_patch.cjs openclaw.mjs gateway --allow-unconfigured --verbose"
-echo "=================================================="
