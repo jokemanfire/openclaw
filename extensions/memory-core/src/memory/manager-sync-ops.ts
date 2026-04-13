@@ -404,12 +404,21 @@ export abstract class MemoryManagerSyncOps {
   }
 
   protected ensureWatcher() {
+    // ZTE_WHL_MEMORY_BEGIN
+    log.warn(`simba_memory ensureWatcher`);
+    // ZTE_WHL_MEMORY_END
+
     if (!this.sources.has("memory") || !this.settings.sync.watch || this.watcher) {
       return;
     }
     const watchPaths = new Set<string>([
       path.join(this.workspaceDir, "MEMORY.md"),
+      path.join(this.workspaceDir, "memory.md"),
+      path.join(this.workspaceDir, "memory", "**", "*.md"),
+
+      // ZTE_WHL_MEMORY_BEGIN
       path.join(this.workspaceDir, "memory"),
+      // ZTE_WHL_MEMORY_END
     ]);
     const additionalPaths = normalizeExtraMemoryPaths(this.workspaceDir, this.settings.extraPaths);
     for (const entry of additionalPaths) {
@@ -419,7 +428,21 @@ export abstract class MemoryManagerSyncOps {
           continue;
         }
         if (stat.isDirectory()) {
-          watchPaths.add(entry);
+          watchPaths.add(path.join(entry, "**", "*.md"));
+
+          // ZTE_WHL_MEMORY_BEGIN
+          watchPaths.add(path.join(entry));
+          // ZTE_WHL_MEMORY_END
+
+          if (this.settings.multimodal.enabled) {
+            for (const modality of this.settings.multimodal.modalities) {
+              for (const extension of getMemoryMultimodalExtensions(modality)) {
+                watchPaths.add(
+                  path.join(entry, "**", buildCaseInsensitiveExtensionGlob(extension)),
+                );
+              }
+            }
+          }
           continue;
         }
         if (
@@ -443,6 +466,10 @@ export abstract class MemoryManagerSyncOps {
       },
     });
     const markDirty = () => {
+      // ZTE_WHL_MEMORY_BEGIN
+      log.warn(`simba_memory markDirty`);
+      // ZTE_WHL_MEMORY_END
+
       this.dirty = true;
       this.scheduleWatchSync();
     };
@@ -456,6 +483,12 @@ export abstract class MemoryManagerSyncOps {
       const message = err instanceof Error ? err.message : String(err);
       log.warn(`memory watcher error: ${message}`);
     });
+
+    // ZTE_WHL_MEMORY_BEGIN
+    this.watcher.on("ready", () => {
+      log.warn(`simba_memory [DEBUG] chokidar ready`);
+    });
+    // ZTE_WHL_MEMORY_END
   }
 
   protected ensureSessionListener() {
@@ -688,6 +721,10 @@ export abstract class MemoryManagerSyncOps {
   }
 
   private scheduleWatchSync() {
+    // ZTE_WHL_MEMORY_BEGIN
+    log.warn(`simba_memory scheduleWatchSync`);
+    // ZTE_WHL_MEMORY_END
+
     if (!this.sources.has("memory") || !this.settings.sync.watch) {
       return;
     }
@@ -981,6 +1018,10 @@ export abstract class MemoryManagerSyncOps {
     sessionFiles?: string[];
     progress?: (update: MemorySyncProgressUpdate) => void;
   }) {
+    // ZTE_WHL_MEMORY_BEGIN
+    log.warn(`simba_memory runSync`);
+    // ZTE_WHL_MEMORY_END
+
     const progress = params?.progress ? this.createSyncProgress(params.progress) : undefined;
     if (progress) {
       progress.report({
