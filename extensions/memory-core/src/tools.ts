@@ -103,6 +103,68 @@ function resolveRecallTrackingResults(
   return surfacedResults.map((surfaced) => rawByKey.get(buildRecallKey(surfaced)) ?? surfaced);
 }
 
+// ZTE_HGJ_MEMORY_BEGIN
+type MemorySearchMeetingNormalized = {
+  time?: string;
+  persons?: string;
+  title?: string;
+  location?: string;
+  isAbstract?: boolean;
+  isFutureMeeting?: boolean;
+};
+
+function normalizeMemorySearchMeeting(raw: unknown): MemorySearchMeetingNormalized | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const obj = raw as Record<string, unknown>;
+  const time = typeof obj.time === "string" ? obj.time.trim() : undefined;
+  const persons = typeof obj.persons === "string" ? obj.persons.trim() : undefined;
+  const title = typeof obj.title === "string" ? obj.title.trim() : undefined;
+  const location = typeof obj.location === "string" ? obj.location.trim() : undefined;
+  const isAbstract =
+    typeof obj.isAbstract === "boolean"
+      ? obj.isAbstract
+      : typeof obj.isAbstract === "string"
+        ? obj.isAbstract.trim().toLowerCase() === "true"
+        : undefined;
+  const isFutureMeeting =
+    typeof obj.isFutureMeeting === "boolean"
+      ? obj.isFutureMeeting
+      : typeof obj.isFutureMeeting === "string"
+        ? obj.isFutureMeeting.trim().toLowerCase() === "true"
+        : undefined;
+  const hasAny =
+    typeof time === "string" ||
+    typeof persons === "string" ||
+    typeof title === "string" ||
+    typeof location === "string" ||
+    typeof isAbstract === "boolean" ||
+    typeof isFutureMeeting === "boolean";
+  if (!hasAny) {
+    return undefined;
+  }
+  return { time, persons, title, location, isAbstract, isFutureMeeting };
+}
+
+function isProvidedMeetingObjectWithNoEffectiveFields(
+  raw: unknown,
+  normalized: MemorySearchMeetingNormalized | undefined,
+): boolean {
+  if (raw === undefined || raw === null) {
+    return false;
+  }
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    return false;
+  }
+  return normalized === undefined;
+}
+
+type EmptyMeetingHandlingPhase = "none" | "rejected_once" | "exhausted";
+
+const emptyMeetingHandlingBySession = new Map<string, EmptyMeetingHandlingPhase>();
+// ZTE_HGJ_MEMORY_END
+
 function queueShortTermRecallTracking(params: {
   workspaceDir?: string;
   query: string;
@@ -237,16 +299,59 @@ export function createMemorySearchTool(options: {
     label: "Memory Search",
     name: "memory_search",
     description:
-      "Mandatory recall step: semantically search MEMORY.md + memory/*.md + extra_path/*.md (and optional session transcripts) before answering any questions related to the user, prior work, decisions, dates, people, preferences, express delivery or todos. Optional `corpus=wiki` or `corpus=all` also searches registered compiled-wiki supplements. `corpus=memory` restricts hits to indexed memory files (excludes session transcript chunks from ranking). `corpus=sessions` restricts hits to indexed session transcripts (same visibility rules as session history tools). If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user.",
+      // ZTE_HGJ_MEMORY_BEGIN
+      "Mandatory recall step: semantically search MEMORY.md + memory/*.md + extra_path/*.md (and optional session transcripts) before answering anything questions related to the user self, prior work, decisions, dates, people, preferences, express delivery or todos; returns top snippets with path + lines. Optional param fetchType: when the query clearly targets a specific personal-info domain, set a single best-matching AIK fetch type (IAiKnowledge.FETCH_TYPE_*): voice_assistant=1, dialog=2, notepad=3, calendar=4, schedule=5, specific_schedule=6. If unclear, omit fetchType. Optional param providerQuery: the original user input (unprocessed). Use query for local search; use providerQuery for AIK provider retrieval + rerank when present. Optional param meeting: when the user is asking about meeting/call contents, pass meeting fields (time/persons/title/location; optional isAbstract/isFutureMeeting booleans). ILLEGAL: passing meeting as an empty object {} (no keys / all-empty strings for time, persons, title, location) — the tool errors on the first such call in a session; omit the meeting key entirely if you have no structured fields yet. At least one of meeting.time, meeting.persons, meeting.title, meeting.location must be a non-empty string when meeting is used. When meeting is provided with valid fields, AIK meeting retrieval will be used (not fetchType). Optional param documents: when the user is asking to list/find documents by name, pass documents.fileName (supports regex anchors ^ and $). When documents is provided, AIK documents retrieval will be used (not fetchType). If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user.",
+      // ZTE_HGJ_MEMORY_END
     parameters: MemorySearchSchema,
     execute:
       ({ cfg, agentId }) =>
-      async (_toolCallId, params) => {
-        const rawParams = asToolParamsRecord(params);
-        const query = readStringParam(rawParams, "query", { required: true });
-        const maxResults = readNumberParam(rawParams, "maxResults");
-        const minScore = readNumberParam(rawParams, "minScore");
-        const requestedCorpus = readStringParam(rawParams, "corpus") as
+      // ZTE_HGJ_MEMORY_BEGIN
+      async (_toolCallId: string, params: Record<string, unknown>) => {
+      // ZTE_HGJ_MEMORY_END
+        const query = readStringParam(params, "query", { required: true });
+        // ZTE_HGJ_MEMORY_BEGIN
+        const maxResults = readNumberParam(params, "maxResults");
+        const minScore = readNumberParam(params, "minScore");
+        const fetchType = readNumberParam(params, "fetchType", { integer: true });
+        const providerQuery = readStringParam(params, "providerQuery");
+        const rawMeeting = (params as Record<string, unknown>).meeting;
+        let meeting = normalizeMemorySearchMeeting(rawMeeting);
+        const meetingSessionKey = options.agentSessionKey ?? "__default__";
+        let meetingOmittedAfterEmptyRetry = false;
+        if (isProvidedMeetingObjectWithNoEffectiveFields(rawMeeting, meeting)) {
+          const emptyMeetingPhase = emptyMeetingHandlingBySession.get(meetingSessionKey) ?? "none";
+          if (emptyMeetingPhase === "none") {
+            emptyMeetingHandlingBySession.set(meetingSessionKey, "rejected_once");
+            return jsonResult({
+              status: "error",
+              tool: "memory_search",
+              code: "empty_meeting_object",
+              error:
+                "memory_search: `meeting` was provided but has no usable fields (e.g. `{}` or only empty strings). " +
+                "AIK meeting retrieval was not run. Re-call memory_search with at least one of: meeting.time, meeting.persons, meeting.title, meeting.location " +
+                "(and optional meeting.isAbstract as boolean). Do not send an empty meeting object.",
+            });
+          }
+          emptyMeetingHandlingBySession.set(meetingSessionKey, "exhausted");
+          meeting = undefined;
+          meetingOmittedAfterEmptyRetry = true;
+        } else {
+          if (meeting !== undefined || rawMeeting === undefined) {
+            emptyMeetingHandlingBySession.delete(meetingSessionKey);
+          }
+        }
+        const normalizeDocuments = (raw: unknown) => {
+          if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+            return undefined;
+          }
+          const obj = raw as Record<string, unknown>;
+          const fileName = typeof obj.fileName === "string" ? obj.fileName.trim() : "";
+          if (!fileName) return undefined;
+          return { fileName };
+        };
+        const documents = normalizeDocuments((params as Record<string, unknown>).documents);
+        // ZTE_HGJ_MEMORY_END
+        const requestedCorpus = readStringParam(params, "corpus") as
           | "memory"
           | "wiki"
           | "all"
@@ -285,38 +390,28 @@ export function createMemorySearchTool(options: {
               }
             | undefined;
           if (shouldQueryMemory && memory && !("error" in memory)) {
-            const runtimeDebug: MemorySearchRuntimeDebug[] = [];
-            const qmdSearchModeOverride = resolveActiveMemoryQmdSearchModeOverride(
-              cfg,
-              options.agentSessionKey,
-            );
-            const searchSources: MemorySource[] | undefined =
-              requestedCorpus === "sessions"
-                ? (["sessions"] as MemorySource[])
-                : requestedCorpus === "memory"
-                  ? (["memory"] as MemorySource[])
-                  : undefined;
-            rawResults = await memory.manager.search(query, {
-              maxResults,
+            // ZTE_HGJ_MEMORY_BEGIN
+            const searchOpts: Record<string, unknown> = {
               minScore,
               sessionKey: options.agentSessionKey,
-              qmdSearchModeOverride,
-              onDebug: (debug) => {
-                runtimeDebug.push(debug);
-              },
-              ...(searchSources ? { sources: searchSources } : {}),
-            });
-            rawResults = await filterMemorySearchHitsBySessionVisibility({
-              cfg,
-              requesterSessionKey: options.agentSessionKey,
-              sandboxed: options.sandboxed === true,
-              hits: rawResults,
-            });
-            if (requestedCorpus === "sessions") {
-              rawResults = rawResults.filter((hit) => hit.source === "sessions");
-            } else if (requestedCorpus === "memory") {
-              rawResults = rawResults.filter((hit) => hit.source === "memory");
+            };
+            if (typeof maxResults === "number" && Number.isFinite(maxResults)) {
+              searchOpts.maxResults = maxResults;
             }
+            if (typeof fetchType === "number" && Number.isFinite(fetchType)) {
+              searchOpts.fetchType = fetchType;
+            }
+            if (meeting) {
+              searchOpts.meeting = meeting;
+            }
+            if (documents) {
+              searchOpts.documents = documents;
+            }
+            if (typeof providerQuery === "string" && providerQuery.trim().length > 0) {
+              searchOpts.providerQuery = providerQuery;
+            }
+            rawResults = await memory.manager.search(query, searchOpts as any);
+            // ZTE_HGJ_MEMORY_END
             const status = memory.manager.status();
             const decorated = decorateCitations(rawResults, includeCitations);
             const resolved = resolveMemoryBackendConfig({ cfg, agentId });
@@ -381,7 +476,16 @@ export function createMemorySearchTool(options: {
             citations: citationsMode,
             mode: searchMode,
             debug: searchDebug,
+            // ZTE_HGJ_MEMORY_BEGIN
+            ...(meetingOmittedAfterEmptyRetry
+              ? {
+                  meetingOmittedAfterEmptyRetry: true,
+                  meetingOmittedNotice:
+                    "Empty `meeting` object again after a prior rejection for this session: meeting was omitted for this search (no AIK meeting channel). Further empty `meeting` in the same session will keep being omitted without another error.",
+                }
+              : {}),
           });
+          // ZTE_HGJ_MEMORY_END
         } catch (err) {
           const message = formatErrorMessage(err);
           return jsonResult(buildMemorySearchUnavailableResult(message));
@@ -405,12 +509,13 @@ export function createMemoryGetTool(options: {
     parameters: MemoryGetSchema,
     execute:
       ({ cfg, agentId }) =>
-      async (_toolCallId, params) => {
-        const rawParams = asToolParamsRecord(params);
-        const relPath = readStringParam(rawParams, "path", { required: true });
-        const from = readNumberParam(rawParams, "from", { integer: true });
-        const lines = readNumberParam(rawParams, "lines", { integer: true });
-        const requestedCorpus = readStringParam(rawParams, "corpus") as
+      // ZTE_HGJ_MEMORY_BEGIN
+      async (_toolCallId: string, params: Record<string, unknown>) => {
+      // ZTE_HGJ_MEMORY_END
+        const relPath = readStringParam(params, "path", { required: true });
+        const from = readNumberParam(params, "from", { integer: true });
+        const lines = readNumberParam(params, "lines", { integer: true });
+        const requestedCorpus = readStringParam(params, "corpus") as
           | "memory"
           | "wiki"
           | "all"

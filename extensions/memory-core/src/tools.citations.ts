@@ -22,7 +22,9 @@ export function decorateCitations(
     return results.map((entry) => ({ ...entry, citation: undefined }));
   }
   return results.map((entry) => {
-    const citation = formatCitation(entry);
+    // ZTE_HGJ_MEMORY_BEGIN
+    const citation = entry.citation ?? formatCitation(entry);
+    // ZTE_HGJ_MEMORY_END
     const snippet = `${entry.snippet.trim()}\n\nSource: ${citation}`;
     return { ...entry, citation, snippet };
   });

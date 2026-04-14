@@ -12,6 +12,10 @@ import { checkQmdBinaryAvailability } from "openclaw/plugin-sdk/memory-core-host
 import {
   resolveMemoryBackendConfig,
   type MemoryEmbeddingProbeResult,
+  // ZTE_HGJ_MEMORY_BEGIN
+  type MemoryMeetingSearchOptions,
+  type MemoryDocumentsSearchOptions,
+  // ZTE_HGJ_MEMORY_END
   type MemorySearchManager,
   type MemorySearchRuntimeDebug,
   type MemorySource,
@@ -418,6 +422,7 @@ class FallbackMemoryManager implements MemorySearchManager {
 
   async search(
     query: string,
+    // ZTE_HGJ_MEMORY_BEGIN
     opts?: {
       maxResults?: number;
       minScore?: number;
@@ -425,7 +430,12 @@ class FallbackMemoryManager implements MemorySearchManager {
       qmdSearchModeOverride?: "query" | "search" | "vsearch";
       onDebug?: (debug: MemorySearchRuntimeDebug) => void;
       sources?: MemorySource[];
+      fetchType?: number;
+      meeting?: MemoryMeetingSearchOptions;
+      documents?: MemoryDocumentsSearchOptions;
+      providerQuery?: string;
     },
+    // ZTE_HGJ_MEMORY_END
   ) {
     this.ensureOpen();
     if (!this.primaryFailed) {

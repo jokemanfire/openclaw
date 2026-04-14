@@ -24,6 +24,13 @@ export const buildPromptSection: MemoryPromptSectionBuilder = ({
   }
 
   const lines = ["## Memory Recall", toolGuidance];
+  // ZTE_HGJ_MEMORY_BEGIN
+  if (hasMemorySearch) {
+    lines.push(
+      "AIKnowledge: When memory_search uses AIK (fetchType 2-6, or meeting, or documents), set providerQuery to the user's latest message verbatim (same wording and language). Use query as short keywords for local indexed search. If providerQuery is omitted, AIK and rerank use query only.",
+    );
+  }
+  // ZTE_HGJ_MEMORY_END
   if (citationsMode === "off") {
     lines.push(
       "Citations are disabled: do not mention file paths or line numbers in replies unless the user explicitly asks.",

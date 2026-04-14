@@ -21,6 +21,11 @@ describe("buildPromptSection", () => {
     expect(result[1]).toContain("run memory_search");
     expect(result[1]).toContain("then use memory_get");
     expect(result[1]).toContain("indexed session transcripts");
+    // ZTE_HGJ_MEMORY_BEGIN
+    expect(result).toContain(
+      "set providerQuery to the user's latest message verbatim (same wording and language)",
+    );
+    // ZTE_HGJ_MEMORY_END
     expect(result).toContain(
       "Citations: include Source: <path#line> when it helps the user verify memory snippets.",
     );
@@ -33,6 +38,11 @@ describe("buildPromptSection", () => {
     expect(result[1]).toContain("run memory_search");
     expect(result[1]).toContain("indexed session transcripts");
     expect(result[1]).not.toContain("then use memory_get");
+    // ZTE_HGJ_MEMORY_BEGIN
+    expect(result).toContain(
+      "set providerQuery to the user's latest message verbatim (same wording and language)",
+    );
+    // ZTE_HGJ_MEMORY_END
   });
 
   it("limits the guidance to memory_get when only get is available", () => {

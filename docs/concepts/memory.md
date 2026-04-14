@@ -45,7 +45,13 @@ The agent has two tools for working with memory:
 
 - **`memory_search`** — finds relevant notes using semantic search, even when
   the wording differs from the original.
-- **`memory_get`** — reads a specific memory file or line range.
+- **`memory_get`** -- reads a specific memory file or line range.
+<!-- ZTE_HGJ_MEMORY_BEGIN -->
+- `memory_search` supports an optional `fetchType` number to steer AIKnowledge-backed recall when applicable (values align with AIK `FETCH_TYPE_*`, e.g. 1 voice assistant, 2 dialog, 3 notepad, 4 calendar, 5 schedule, 6 specific schedule). If unsure, default 1.
+<!-- Ended by Cursor 10351773 20260409140342627 -->
+<!-- Started by Cursor 10351773 20260413210000234 -->
+- Optional **`providerQuery`**: For AIKnowledge RAG and rerank, pass the **verbatim** user message (latest user turn). Use **`query`** as concise terms for local workspace or session search. When you set **`fetchType`** to 2-6 or use **`meeting`** / **`documents`**, always pass **`providerQuery`**; if you omit it, AIK falls back to **`query`** only.
+<!-- ZTE_HGJ_MEMORY_END -->
 
 Both tools are provided by the active memory plugin (default: `memory-core`).
 

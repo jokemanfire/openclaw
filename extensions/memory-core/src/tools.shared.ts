@@ -39,6 +39,25 @@ export const MemorySearchSchema = Type.Object({
       Type.Literal("sessions"),
     ]),
   ),
+  // ZTE_HGJ_MEMORY_BEGIN
+  fetchType: Type.Optional(Type.Number()),
+  providerQuery: Type.Optional(Type.String()),
+  meeting: Type.Optional(
+    Type.Object({
+      time: Type.Optional(Type.String()),
+      persons: Type.Optional(Type.String()),
+      title: Type.Optional(Type.String()),
+      location: Type.Optional(Type.String()),
+      isAbstract: Type.Optional(Type.Boolean()),
+      isFutureMeeting: Type.Optional(Type.Boolean()),
+    }),
+  ),
+  documents: Type.Optional(
+    Type.Object({
+      fileName: Type.String(),
+    }),
+  ),
+  // ZTE_HGJ_MEMORY_END
 });
 
 export const MemoryGetSchema = Type.Object({

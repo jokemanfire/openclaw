@@ -81,10 +81,26 @@ export type MemoryProviderStatus = {
   };
   custom?: Record<string, unknown>;
 };
+// ZTE_HGJ_MEMORY_BEGIN
+export type MemoryMeetingSearchOptions = {
+  time?: string;
+  persons?: string;
+  title?: string;
+  location?: string;
+  isAbstract?: boolean;
+  isFutureMeeting?: boolean;
+};
+// ZTE_HGJ_MEMORY_END
+// ZTE_HGJ_MEMORY_BEGIN
+export type MemoryDocumentsSearchOptions = {
+  fileName: string;
+};
+// ZTE_HGJ_MEMORY_END
 
 export interface MemorySearchManager {
   search(
     query: string,
+    // ZTE_HGJ_MEMORY_BEGIN
     opts?: {
       maxResults?: number;
       minScore?: number;
@@ -92,7 +108,12 @@ export interface MemorySearchManager {
       qmdSearchModeOverride?: "query" | "search" | "vsearch";
       onDebug?: (debug: MemorySearchRuntimeDebug) => void;
       sources?: MemorySource[];
+      fetchType?: number;
+      meeting?: MemoryMeetingSearchOptions;
+      documents?: MemoryDocumentsSearchOptions;
+      providerQuery?: string;
     },
+    // ZTE_HGJ_MEMORY_END
   ): Promise<MemorySearchResult[]>;
   readFile(params: { relPath: string; from?: number; lines?: number }): Promise<MemoryReadResult>;
   status(): MemoryProviderStatus;

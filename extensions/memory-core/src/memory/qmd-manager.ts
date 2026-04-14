@@ -38,6 +38,10 @@ import {
   requireNodeSqlite,
   statRegularFile,
   type MemoryEmbeddingProbeResult,
+  // ZTE_HGJ_MEMORY_BEGIN
+  type MemoryMeetingSearchOptions,
+  type MemoryDocumentsSearchOptions,
+  // ZTE_HGJ_MEMORY_END
   type MemoryProviderStatus,
   type MemorySearchManager,
   type MemorySearchRuntimeDebug,
@@ -1076,6 +1080,7 @@ export class QmdMemoryManager implements MemorySearchManager {
 
   async search(
     query: string,
+    // ZTE_HGJ_MEMORY_BEGIN
     opts?: {
       maxResults?: number;
       minScore?: number;
@@ -1083,7 +1088,12 @@ export class QmdMemoryManager implements MemorySearchManager {
       qmdSearchModeOverride?: "query" | "search" | "vsearch";
       onDebug?: (debug: MemorySearchRuntimeDebug) => void;
       sources?: MemorySource[];
+      fetchType?: number;
+      meeting?: MemoryMeetingSearchOptions;
+      documents?: MemoryDocumentsSearchOptions;
+      providerQuery?: string;
     },
+    // ZTE_HGJ_MEMORY_END
   ): Promise<MemorySearchResult[]> {
     if (!this.isScopeAllowed(opts?.sessionKey)) {
       this.logScopeDenied(opts?.sessionKey);

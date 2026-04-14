@@ -12,6 +12,10 @@ import {
 import { extractKeywords } from "openclaw/plugin-sdk/memory-core-host-engine-qmd";
 import {
   readMemoryFile,
+  // ZTE_HGJ_MEMORY_BEGIN
+  type MemoryDocumentsSearchOptions,
+  type MemoryMeetingSearchOptions,
+  // ZTE_HGJ_MEMORY_END
   type MemoryEmbeddingProbeResult,
   type MemoryProviderStatus,
   type MemorySearchManager,
@@ -43,6 +47,12 @@ import {
   resolveMemoryProviderState,
 } from "./manager-provider-state.js";
 import { resolveMemorySearchPreflight } from "./manager-search-preflight.js";
+// ZTE_HGJ_MEMORY_BEGIN
+import { queryAiKnowledgeOpenClawRagAsKeywordResults } from "../../../../src/zte_modules/memory/aiKnowledgeOpenclawRag.js";
+import { queryAiKnowledgeOpenClawMeetingAsKeywordResults } from "../../../../src/zte_modules/memory/aiKnowledgeOpenclawMeeting.js";
+import { queryAiKnowledgeOpenClawDocumentsAsKeywordResults } from "../../../../src/zte_modules/memory/aiKnowledgeOpenclawDocuments.js";
+import { fuseRecallResults } from "../../../../src/zte_modules/memory/fuseRecallResults.js";
+// ZTE_HGJ_MEMORY_END
 import { searchKeyword, searchVector } from "./manager-search.js";
 import {
   collectMemoryStatusAggregate,
@@ -306,6 +316,11 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     opts?: {
       maxResults?: number;
       minScore?: number;
+      fetchType?: number;
+      meeting?: MemoryMeetingSearchOptions;
+      documents?: MemoryDocumentsSearchOptions;
+      providerQuery?: string;
+      // ZTE_HGJ_MEMORY_END
       sessionKey?: string;
       qmdSearchModeOverride?: "query" | "search" | "vsearch";
       onDebug?: (debug: MemorySearchRuntimeDebug) => void;
@@ -347,6 +362,23 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     if (preflight.shouldInitializeProvider) {
       await this.ensureProviderInitialized();
     }
+
+    // ZTE_HGJ_MEMORY_BEGIN
+    const providerQuery =
+      typeof opts?.providerQuery === "string" && opts.providerQuery.trim().length > 0
+        ? opts.providerQuery.trim()
+        : cleaned;
+    {
+      const explicitProviderQuery =
+        typeof opts?.providerQuery === "string" && opts.providerQuery.trim().length > 0;
+      const preview = (s: string, max = 120) =>
+        s.length <= max ? JSON.stringify(s) : `${JSON.stringify(s.slice(0, max))}…(len=${String(s.length)})`;
+      log.info(
+        `[memory-recall] localQuery(after-preflight)=${preview(cleaned)} aikQuery(sent-to-provider)=${preview(providerQuery)} explicitProviderQuery=${String(explicitProviderQuery)}`,
+      );
+    }
+    // ZTE_HGJ_MEMORY_END
+
     const minScore = opts?.minScore ?? this.settings.query.minScore;
     const maxResults = opts?.maxResults ?? this.settings.query.maxResults;
     const searchSources =
@@ -459,6 +491,49 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       return vectorResults.filter((entry) => entry.score >= minScore).slice(0, maxResults);
     }
 
+    // ZTE_HGJ_MEMORY_BEGIN
+    // Provider routing policy:
+    // - meeting/documents always use provider.
+    // - fetchType=1 (voice assistant) disables provider to keep retrieval local-only.
+    const resolvedFetchType = typeof opts?.fetchType === "number" ? opts.fetchType : 1;
+    const shouldUseProvider =
+      Boolean(opts?.meeting) ||
+      Boolean(opts?.documents) ||
+      (Number.isFinite(resolvedFetchType) && resolvedFetchType !== 1);
+    const aiKnowledgeResults = shouldUseProvider
+      ? await (opts?.meeting
+          ? queryAiKnowledgeOpenClawMeetingAsKeywordResults({
+              cfg: this.cfg,
+              /* Started by Cursor 10351773 20260410171044085 */
+              query: providerQuery,
+              /* Ended by Cursor 10351773 20260410171044085 */
+              limit: candidates,
+              meeting: opts.meeting as any,
+              logger: { info: (message: string) => log.info(message) },
+            })
+          : opts?.documents
+            ? queryAiKnowledgeOpenClawDocumentsAsKeywordResults({
+                cfg: this.cfg,
+                fileName: opts.documents.fileName,
+                limit: candidates,
+                logger: { info: (message: string) => log.info(message) },
+              })
+            : queryAiKnowledgeOpenClawRagAsKeywordResults({
+                cfg: this.cfg,
+                /* Started by Cursor 10351773 20260410171044085 */
+                query: providerQuery,
+                /* Ended by Cursor 10351773 20260410171044085 */
+                limit: candidates,
+                fetchType: resolvedFetchType,
+                logger: { info: (message: string) => log.info(message) },
+              })
+        ).catch(() => [])
+      : [];
+    log.info(
+      `[memory-recall] openclaw-local: keywordHits=${String(keywordResults.length)} vectorHits=${String(vectorResults.length)} shouldUseProvider=${String(shouldUseProvider)} fetchType=${String(resolvedFetchType)} aik-provider-raw=${String(aiKnowledgeResults.length)}`,
+    );
+    // ZTE_HGJ_MEMORY_END
+
     const merged = await this.mergeHybridResults({
       vector: vectorResults,
       keyword: keywordResults,
@@ -468,8 +543,35 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       temporalDecay: hybrid.temporalDecay,
     });
     const strict = merged.filter((entry) => entry.score >= minScore);
+    // ZTE_HGJ_MEMORY_BEGIN
+    log.info(
+      `[memory-recall] openclaw-local-after-merge: merged=${String(merged.length)} strictAboveMinScore=${String(strict.length)} minScore=${String(minScore)}`,
+    );
+    const aiKnowledgeAsResults: MemorySearchResult[] = aiKnowledgeResults.map((r: any, i: number) => ({
+      path: r.path,
+      startLine: r.startLine,
+      endLine: r.endLine,
+      score: r.score,
+      snippet: r.snippet,
+      source: "memory",
+      citation:
+        typeof r?.path === "string" && r.path.trim().length > 0 ? `${r.path}#item-${String(i + 1)}` : undefined,
+    }));
+    // ZTE_HGJ_MEMORY_END
     if (strict.length > 0 || keywordResults.length === 0) {
-      return strict.slice(0, maxResults);
+      // ZTE_HGJ_MEMORY_BEGIN
+      if (!shouldUseProvider) {
+        return strict.slice(0, maxResults);
+      }
+      return await fuseRecallResults({
+        primary: strict.slice(0, maxResults),
+        secondary: aiKnowledgeAsResults,
+        maxResults,
+        cfg: this.cfg,
+        query: providerQuery,
+        logger: { info: (message: string) => log.info(message) },
+      });
+    // ZTE_HGJ_MEMORY_END
     }
 
     // Hybrid defaults can produce keyword-only matches with max score equal to
@@ -482,7 +584,8 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
         (entry) => `${entry.source}:${entry.path}:${entry.startLine}:${entry.endLine}`,
       ),
     );
-    return this.selectScoredResults(
+    // ZTE_HGJ_MEMORY_BEGIN
+    const openClawRelaxed = this.selectScoredResults(
       merged.filter((entry) =>
         keywordKeys.has(`${entry.source}:${entry.path}:${entry.startLine}:${entry.endLine}`),
       ),
@@ -490,6 +593,18 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       minScore,
       relaxedMinScore,
     );
+    if (!shouldUseProvider) {
+      return openClawRelaxed;
+    }
+    return await fuseRecallResults({
+      primary: openClawRelaxed,
+      secondary: aiKnowledgeAsResults,
+      maxResults,
+      cfg: this.cfg,
+      query: providerQuery,
+      logger: { info: (message: string) => log.info(message) },
+    });
+    /// ZTE_HGJ_MEMORY_END
   }
 
   private selectScoredResults<T extends MemorySearchResult & { score: number }>(
