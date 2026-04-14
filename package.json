@@ -506,6 +506,10 @@
       "types": "./dist/plugin-sdk/acp-runtime-backend.d.ts",
       "default": "./dist/plugin-sdk/acp-runtime-backend.js"
     },
+    "./plugin-sdk/acpx": {
+      "types": "./dist/plugin-sdk/acpx.d.ts",
+      "default": "./dist/plugin-sdk/acpx.js"
+    },
     "./plugin-sdk/acp-binding-runtime": {
       "types": "./dist/plugin-sdk/acp-binding-runtime.d.ts",
       "default": "./dist/plugin-sdk/acp-binding-runtime.js"
