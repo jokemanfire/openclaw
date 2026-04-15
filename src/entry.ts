@@ -1,4 +1,15 @@
 #!/usr/bin/env node
+// Polyfills for restricted environments (e.g., Android) - must be first
+import fs from "node:fs";
+if (!fs.realpathSync.native || typeof fs.realpathSync.native !== "function") {
+  try {
+    // @ts-expect-error: patching read-only property for compatibility
+    fs.realpathSync.native = fs.realpathSync;
+  } catch {
+    // Best-effort only
+  }
+}
+import { spawn } from "node:child_process";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { isRootHelpInvocation } from "./cli/argv.js";
