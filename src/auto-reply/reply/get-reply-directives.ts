@@ -19,6 +19,7 @@ import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import { resolveBlockStreamingChunking } from "./block-streaming.js";
 import { buildCommandContext } from "./commands-context.js";
 import { type InlineDirectives, parseInlineDirectives } from "./directive-handling.parse.js";
+import { shouldPreserveMixedBodyInlineDirectives } from "./directives.js";
 import {
   reserveSkillCommandNames,
   resolveConfiguredDirectiveAliases,
@@ -308,14 +309,20 @@ export async function resolveReplyDirectives(params: {
         modelAliases: configuredAliases,
       });
       if (directiveOnlyCheck.cleaned.trim().length > 0) {
-        const allowInlineStatus =
-          parsedDirectives.hasStatusDirective && allowTextCommands && command.isAuthorizedSender;
-        parsedDirectives = allowInlineStatus
-          ? {
-              ...clearInlineDirectives(parsedDirectives.cleaned),
-              hasStatusDirective: true,
-            }
-          : clearInlineDirectives(parsedDirectives.cleaned);
+        // Slash-led: `/think off hello`, gateway `chat.send` → `/think … <body>`.
+        // Trailing think: `hello /think off` — same session apply as `/think off hello`.
+        // Prose + mid-sentence think: `please sync /think:high now` — strip session directives.
+        const preserveMixedDirectives = shouldPreserveMixedBodyInlineDirectives(commandText);
+        if (!preserveMixedDirectives) {
+          const allowInlineStatus =
+            parsedDirectives.hasStatusDirective && allowTextCommands && command.isAuthorizedSender;
+          parsedDirectives = allowInlineStatus
+            ? {
+                ...clearInlineDirectives(parsedDirectives.cleaned),
+                hasStatusDirective: true,
+              }
+            : clearInlineDirectives(parsedDirectives.cleaned);
+        }
       }
     }
   }

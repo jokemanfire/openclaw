@@ -107,6 +107,24 @@ export function extractThinkDirective(body?: string): {
   };
 }
 
+/**
+ * Whether inline session directives should be kept when the message mixes a directive with body text.
+ * - Slash-led: `/think off hello`, `/verbose on hi` — keep directives.
+ * - Trailing think only: `hello /think off`, `summary /t low` — same as leading `/think` (nothing after the level).
+ * - Mid-sentence think: `foo /think high bar` — still strip session directives (false).
+ */
+export function shouldPreserveMixedBodyInlineDirectives(commandText: string): boolean {
+  const t = commandText.trimStart();
+  if (t.startsWith("/")) {
+    return true;
+  }
+  const match = matchLevelDirective(t, ["thinking", "think", "t"]);
+  if (!match) {
+    return false;
+  }
+  return t.slice(match.end).trim() === "";
+}
+
 export function extractVerboseDirective(body?: string): {
   cleaned: string;
   verboseLevel?: VerboseLevel;
