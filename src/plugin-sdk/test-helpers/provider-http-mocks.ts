@@ -13,23 +13,36 @@ type SanitizeConfiguredModelProviderRequestParams = Parameters<
   typeof sanitizeConfiguredModelProviderRequest
 >[0];
 
-const providerHttpMocks = vi.hoisted(() => ({
-  resolveApiKeyForProviderMock: vi.fn(async () => ({ apiKey: "provider-key" })),
-  postJsonRequestMock: vi.fn(),
-  fetchWithTimeoutMock: vi.fn(),
-  pollProviderOperationJsonMock: vi.fn(),
-  assertOkOrThrowHttpErrorMock: vi.fn(async (_response: Response, _label: string) => {}),
-  assertOkOrThrowProviderErrorMock: vi.fn(async (_response: Response, _label: string) => {}),
-  sanitizeConfiguredModelProviderRequestMock: vi.fn(
-    (request: SanitizeConfiguredModelProviderRequestParams) => request,
-  ),
-  resolveProviderHttpRequestConfigMock: vi.fn((params: ResolveProviderHttpRequestConfigParams) => ({
-    baseUrl: params.baseUrl ?? params.defaultBaseUrl,
-    allowPrivateNetwork: params.allowPrivateNetwork === true,
-    headers: new Headers(params.defaultHeaders),
-    dispatcherPolicy: undefined,
-  })),
-}));
+const providerHttpMocks = vi.hoisted(
+  (): {
+    resolveApiKeyForProviderMock: ReturnType<typeof vi.fn>;
+    postJsonRequestMock: ReturnType<typeof vi.fn>;
+    fetchWithTimeoutMock: ReturnType<typeof vi.fn>;
+    pollProviderOperationJsonMock: ReturnType<typeof vi.fn>;
+    assertOkOrThrowHttpErrorMock: ReturnType<typeof vi.fn>;
+    assertOkOrThrowProviderErrorMock: ReturnType<typeof vi.fn>;
+    sanitizeConfiguredModelProviderRequestMock: ReturnType<typeof vi.fn>;
+    resolveProviderHttpRequestConfigMock: ReturnType<typeof vi.fn>;
+  } => ({
+    resolveApiKeyForProviderMock: vi.fn(async () => ({ apiKey: "provider-key" })),
+    postJsonRequestMock: vi.fn(),
+    fetchWithTimeoutMock: vi.fn(),
+    pollProviderOperationJsonMock: vi.fn(),
+    assertOkOrThrowHttpErrorMock: vi.fn(async (_response: Response, _label: string) => {}),
+    assertOkOrThrowProviderErrorMock: vi.fn(async (_response: Response, _label: string) => {}),
+    sanitizeConfiguredModelProviderRequestMock: vi.fn(
+      (request: SanitizeConfiguredModelProviderRequestParams) => request,
+    ),
+    resolveProviderHttpRequestConfigMock: vi.fn(
+      (params: ResolveProviderHttpRequestConfigParams) => ({
+        baseUrl: params.baseUrl ?? params.defaultBaseUrl,
+        allowPrivateNetwork: params.allowPrivateNetwork === true,
+        headers: new Headers(params.defaultHeaders),
+        dispatcherPolicy: undefined,
+      }),
+    ),
+  }),
+) as any;
 
 providerHttpMocks.pollProviderOperationJsonMock.mockImplementation(
   async (params: PollProviderOperationJsonParams) => {
@@ -85,7 +98,7 @@ vi.mock("openclaw/plugin-sdk/provider-http", () => ({
   waitProviderOperationPollInterval: async () => {},
 }));
 
-export function getProviderHttpMocks() {
+export function getProviderHttpMocks(): typeof providerHttpMocks {
   return providerHttpMocks;
 }
 
