@@ -306,6 +306,7 @@ export function createFollowupRunner(params: {
                 config: runtimeConfig,
                 skillsSnapshot: run.skillsSnapshot,
                 prompt: queued.prompt,
+                memoryWriteUserBodyPlain: queued.memoryWriteUserBodyPlain,
                 transcriptPrompt: queued.transcriptPrompt,
                 currentTurnContext: queued.currentTurnContext,
                 extraSystemPrompt: run.extraSystemPrompt,

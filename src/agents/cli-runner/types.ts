@@ -66,6 +66,11 @@ export type RunCliAgentParams = {
    * alive after the JSON response is emitted.
    */
   cleanupBundleMcpOnRunEnd?: boolean;
+  /**
+   * Inbound user message body for this run only (no inbound envelope, thread blocks,
+   * or system-event prefixes). Propagated to after_tool_call for AIK memory_write `content`.
+   */
+  memoryWriteUserBodyPlain?: string;
 };
 
 export type CliPreparedBackend = {

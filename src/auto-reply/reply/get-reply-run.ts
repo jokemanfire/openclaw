@@ -939,8 +939,10 @@ export async function runPreparedReply(
     normalizeOptionalString(preparedSessionState.sessionEntry?.modelOverride) ||
     normalizeOptionalString(preparedSessionState.sessionEntry?.providerOverride),
   );
+  const memoryWriteUserBodyPlain = isBareSessionReset ? rawBodyTrimmed : baseBody.trim();
   const followupRun = {
     prompt: queuedBody,
+    memoryWriteUserBodyPlain,
     transcriptPrompt: transcriptCommandBody,
     currentTurnContext,
     replyRunId: normalizeOptionalString(opts?.runId),

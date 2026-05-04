@@ -6,6 +6,7 @@ import type { HookRunner } from "../plugins/hooks.js";
 import type { AgentInternalEvent } from "./internal-events.js";
 import type { BlockReplyPayload } from "./pi-embedded-payloads.js";
 import type { EmbeddedRunReplayState } from "./pi-embedded-runner/replay-state.js";
+import type { EmbeddedRunTrigger } from "./pi-embedded-runner/run/params.js";
 import type {
   BlockReplyChunking,
   ToolProgressDetailMode,
@@ -62,4 +63,10 @@ export type SubscribeEmbeddedPiSessionParams = {
    */
   builtinToolNames?: ReadonlySet<string>;
   internalEvents?: AgentInternalEvent[];
+  /** Initiator of this embedded run (mirrors RunEmbeddedPiAgentParams.trigger). */
+  runTrigger?: EmbeddedRunTrigger;
+  /** Agent workspace root on the host (mirrors embedded attempt workspaceDir). */
+  agentWorkspaceDir?: string;
+  /** Inbound user body for this run only (mirrors RunEmbeddedPiAgentParams.memoryWriteUserBodyPlain). Used by after_tool_call → AIK memory_write as `content` (not the memory file on disk). */
+  memoryWriteUserBodyPlain?: string;
 };

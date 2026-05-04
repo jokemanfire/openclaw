@@ -187,6 +187,10 @@ type ToolHandlerParams = Pick<
   | "agentId"
   | "toolResultFormat"
   | "toolProgressDetail"
+  | "runTrigger"
+  | "agentWorkspaceDir"
+  | "memoryWriteUserBodyPlain"
+  | "config"
 >;
 
 type ToolHandlerState = Pick<

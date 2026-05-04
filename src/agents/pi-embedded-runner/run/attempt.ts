@@ -2340,6 +2340,9 @@ export async function runEmbeddedAttempt(
           agentId: sessionAgentId,
           builtinToolNames,
           internalEvents: params.internalEvents,
+          runTrigger: params.trigger,
+          agentWorkspaceDir: effectiveWorkspace,
+          memoryWriteUserBodyPlain: params.memoryWriteUserBodyPlain,
         }),
       );
 

@@ -29,6 +29,8 @@ export type FollowupRun = {
   transcriptPrompt?: string;
   /** Explicit current-turn context that should be visible for this run but not persisted as user text. */
   currentTurnContext?: CurrentTurnPromptContext;
+  /** User inbound body for this turn only (no envelope / thread / system-event prefixes). Passed through to embedded runs for AIK memory_write `content`. */
+  memoryWriteUserBodyPlain?: string;
   /**
    * Gateway/client idempotency run id for this turn (e.g. chat.send).
    * Must be stored on the queued item: the drain callback is shared per queue key

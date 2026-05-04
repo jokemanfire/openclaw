@@ -111,6 +111,8 @@ export type RunEmbeddedPiAgentParams = {
   transcriptPrompt?: string;
   /** Explicit current-turn context that must be visible to the model but not persisted as user text. */
   currentTurnContext?: CurrentTurnPromptContext;
+  /** Inbound user message body for this run only (no inbound envelope, thread blocks, or system-event prefixes). Propagated to after_tool_call for AIK memory_write `content`. */
+  memoryWriteUserBodyPlain?: string;
   images?: ImageContent[];
   imageOrder?: PromptImageOrderEntry[];
   /** Optional client-provided tools (OpenResponses hosted tools). */

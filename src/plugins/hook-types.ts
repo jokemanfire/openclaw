@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { EmbeddedRunTrigger } from "../agents/pi-embedded-runner/run/params.js";
 import type { SourceReplyDeliveryMode } from "../auto-reply/get-reply-options.types.js";
 import type { ReplyPayload } from "../auto-reply/reply-payload.js";
 import type {
@@ -408,6 +409,10 @@ export type PluginHookToolContext = {
   getSessionExtension?: <T extends PluginJsonValue = PluginJsonValue>(
     namespace: string,
   ) => T | undefined;
+  runTrigger?: EmbeddedRunTrigger;
+  agentWorkspaceDir?: string;
+  memoryWriteUserBodyPlain?: string;
+  config?: OpenClawConfig;
 };
 
 export type PluginHookBeforeToolCallEvent = {

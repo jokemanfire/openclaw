@@ -126,6 +126,13 @@ function collectQueuedImages(items: FollowupRun[]): Pick<FollowupRun, "images" |
   };
 }
 
+function collectMemoryWriteUserBodyPlain(items: FollowupRun[]): string | undefined {
+  const memoryPlainParts = items
+    .map((i) => i.memoryWriteUserBodyPlain?.trim())
+    .filter((s): s is string => Boolean(s && s.length > 0));
+  return memoryPlainParts.length > 0 ? memoryPlainParts.join("\n\n") : undefined;
+}
+
 function resolveCrossChannelKey(item: FollowupRun): { cross?: true; key?: string } {
   const { originatingChannel: channel, originatingTo: to, originatingAccountId: accountId } = item;
   const threadId = item.originatingThreadId;
@@ -225,8 +232,10 @@ export function scheduleFollowupDrain(
               summary: pendingSummary,
               renderItem: renderCollectItem,
             });
+            const memoryWriteUserBodyPlain = collectMemoryWriteUserBodyPlain(groupItems);
             await effectiveRunFollowup({
               prompt,
+              memoryWriteUserBodyPlain,
               run,
               enqueuedAt: Date.now(),
               replyRunId: item?.replyRunId,
@@ -253,6 +262,7 @@ export function scheduleFollowupDrain(
             !(await drainNextQueueItem(queue.items, async (item) => {
               await effectiveRunFollowup({
                 prompt: summaryPrompt,
+                memoryWriteUserBodyPlain: item.memoryWriteUserBodyPlain,
                 run,
                 enqueuedAt: Date.now(),
                 replyRunId: item.replyRunId,

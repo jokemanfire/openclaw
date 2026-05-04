@@ -1220,6 +1220,10 @@ export async function handleToolExecutionEnd(
         sessionId: ctx.params.sessionId,
         runId,
         toolCallId,
+        runTrigger: ctx.params.runTrigger,
+        agentWorkspaceDir: ctx.params.agentWorkspaceDir,
+        memoryWriteUserBodyPlain: ctx.params.memoryWriteUserBodyPlain,
+        config: ctx.params.config,
       })
       .catch((err) => {
         ctx.log.warn(`after_tool_call hook failed: tool=${toolName} error=${String(err)}`);
