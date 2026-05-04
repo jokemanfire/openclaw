@@ -2463,6 +2463,7 @@ export const chatHandlers: GatewayRequestHandlers = {
           abortSignal: activeRunAbort.controller.signal,
           images: parsedImages.length > 0 ? parsedImages : undefined,
           imageOrder: imageOrder.length > 0 ? imageOrder : undefined,
+          onReasoningStream: async () => {},
           onAgentRunStart: (runId) => {
             agentRunStarted = true;
             void emitUserTranscriptUpdate();
