@@ -59,6 +59,8 @@ function buildProviderCallArgv(method: string, text: string): string[] {
     `img_link:s:${escapeContentCallExtraValue("")}`,
     "--extra",
     `img_content:s:${escapeContentCallExtraValue("")}`,
+    "--extra",
+    `img_entity_id:s:${escapeContentCallExtraValue("")}`,
   ];
 }
 
@@ -118,6 +120,7 @@ function buildDefaultMemoryWriteCommandLine(text: string): string {
     `--extra "img_source:s:${emptyEx}"`,
     `--extra "img_link:s:${emptyEx}"`,
     `--extra "img_content:s:${emptyEx}"`,
+    `--extra "img_entity_id:s:${emptyEx}"`,
   ];
   return parts.join(" ");
 }
@@ -150,7 +153,8 @@ function buildMemoryWriteCommandLine(params: { cfg: OpenClawConfig; text: string
     .replaceAll("{img_uri}", emptyEx)
     .replaceAll("{img_source}", emptyEx)
     .replaceAll("{img_link}", emptyEx)
-    .replaceAll("{img_content}", emptyEx);
+    .replaceAll("{img_content}", emptyEx)
+    .replaceAll("{img_entity_id}", emptyEx);
 }
 
 export async function notifyAiKnowledgeMemoryWriteViaAdb(
