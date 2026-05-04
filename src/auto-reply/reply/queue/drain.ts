@@ -198,10 +198,13 @@ export function scheduleFollowupDrain(
             if (!summary || !run) {
               break;
             }
+            const lastQueued = queue.items.at(-1);
             await effectiveRunFollowup({
               prompt: summary,
               run,
               enqueuedAt: Date.now(),
+              replyRunId: lastQueued?.replyRunId,
+              replyAbortSignal: lastQueued?.replyAbortSignal,
             });
             clearQueueSummaryState(queue);
             continue;
@@ -209,7 +212,8 @@ export function scheduleFollowupDrain(
 
           let pendingSummary = summary;
           for (const groupItems of authGroups) {
-            const run = groupItems.at(-1)?.run ?? queue.lastRun;
+            const item = groupItems.at(-1);
+            const run = item?.run ?? queue.lastRun;
             if (!run) {
               break;
             }
@@ -225,6 +229,8 @@ export function scheduleFollowupDrain(
               prompt,
               run,
               enqueuedAt: Date.now(),
+              replyRunId: item?.replyRunId,
+              replyAbortSignal: item?.replyAbortSignal,
               ...routing,
               ...collectQueuedImages(groupItems),
             });
@@ -249,6 +255,8 @@ export function scheduleFollowupDrain(
                 prompt: summaryPrompt,
                 run,
                 enqueuedAt: Date.now(),
+                replyRunId: item.replyRunId,
+                replyAbortSignal: item.replyAbortSignal,
                 originatingChannel: item.originatingChannel,
                 originatingTo: item.originatingTo,
                 originatingAccountId: item.originatingAccountId,

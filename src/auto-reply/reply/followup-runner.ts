@@ -18,6 +18,7 @@ import { logVerbose } from "../../globals.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { defaultRuntime } from "../../runtime.js";
+import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import { isInternalMessageChannel } from "../../utils/message-channel.js";
 import { stripHeartbeatToken } from "../heartbeat.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
@@ -219,10 +220,13 @@ export function createFollowupRunner(params: {
       sessionId: run.sessionId,
       sessionKey: replySessionKey ?? "",
       resetTriggered: false,
-      upstreamAbortSignal: opts?.abortSignal,
+      upstreamAbortSignal: queued.replyAbortSignal ?? opts?.abortSignal,
     });
     try {
-      const runId = opts?.runId ?? crypto.randomUUID();
+      const runId =
+        normalizeOptionalString(queued.replyRunId) ??
+        normalizeOptionalString(opts?.runId) ??
+        crypto.randomUUID();
       const shouldSurfaceToControlUi = isInternalMessageChannel(
         resolveOriginMessageProvider({
           originatingChannel: queued.originatingChannel,

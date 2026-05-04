@@ -48,6 +48,9 @@ export function startGatewayEventSubscriptions(params: {
           const entry = params.chatAbortControllers.get(runId);
           return entry !== undefined && entry.kind !== "agent";
         },
+        releaseChatAbortController: (clientRunId) => {
+          params.chatAbortControllers.delete(clientRunId);
+        },
       }),
     );
     return agentEventHandlerPromise;

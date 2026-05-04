@@ -943,6 +943,8 @@ export async function runPreparedReply(
     prompt: queuedBody,
     transcriptPrompt: transcriptCommandBody,
     currentTurnContext,
+    replyRunId: normalizeOptionalString(opts?.runId),
+    replyAbortSignal: opts?.abortSignal,
     messageId: sessionCtx.MessageSidFull ?? sessionCtx.MessageSid,
     summaryLine: baseBodyTrimmedRaw,
     enqueuedAt: Date.now(),

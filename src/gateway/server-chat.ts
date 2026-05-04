@@ -152,6 +152,8 @@ export type AgentEventHandlerOptions = {
   loadGatewaySessionRowForSnapshot?: typeof loadGatewaySessionRow;
   lifecycleErrorRetryGraceMs?: number;
   isChatSendRunActive?: (runId: string) => boolean;
+  /** Called when a chat.send run is fully terminal (lifecycle end/error). Releases gateway abort handles. */
+  releaseChatAbortController?: (clientRunId: string) => void;
 };
 
 export function createAgentEventHandler({
@@ -167,6 +169,7 @@ export function createAgentEventHandler({
   loadGatewaySessionRowForSnapshot = loadGatewaySessionRow,
   lifecycleErrorRetryGraceMs = AGENT_LIFECYCLE_ERROR_RETRY_GRACE_MS,
   isChatSendRunActive = () => false,
+  releaseChatAbortController,
 }: AgentEventHandlerOptions) {
   const pendingTerminalLifecycleErrors = new Map<string, NodeJS.Timeout>();
 
@@ -348,28 +351,32 @@ export function createAgentEventHandler({
       }
     }
 
-    toolEventRecipients.markFinal(evt.runId);
-    clearAgentRunContext(evt.runId);
-    agentRunSeq.delete(evt.runId);
-    agentRunSeq.delete(clientRunId);
+    try {
+      toolEventRecipients.markFinal(evt.runId);
+      clearAgentRunContext(evt.runId);
+      agentRunSeq.delete(evt.runId);
+      agentRunSeq.delete(clientRunId);
 
-    if (sessionKey) {
-      void persistGatewaySessionLifecycleEvent({ sessionKey, event: evt }).catch(() => undefined);
-      const sessionEventConnIds = sessionEventSubscribers.getAll();
-      if (sessionEventConnIds.size > 0) {
-        broadcastToConnIds(
-          "sessions.changed",
-          {
-            sessionKey,
-            phase: lifecyclePhase,
-            runId: evt.runId,
-            ts: evt.ts,
-            ...buildSessionEventSnapshot(sessionKey, evt),
-          },
-          sessionEventConnIds,
-          { dropIfSlow: true },
-        );
+      if (sessionKey) {
+        void persistGatewaySessionLifecycleEvent({ sessionKey, event: evt }).catch(() => undefined);
+        const sessionEventConnIds = sessionEventSubscribers.getAll();
+        if (sessionEventConnIds.size > 0) {
+          broadcastToConnIds(
+            "sessions.changed",
+            {
+              sessionKey,
+              phase: lifecyclePhase,
+              runId: evt.runId,
+              ts: evt.ts,
+              ...buildSessionEventSnapshot(sessionKey, evt),
+            },
+            sessionEventConnIds,
+            { dropIfSlow: true },
+          );
+        }
       }
+    } finally {
+      releaseChatAbortController?.(clientRunId);
     }
   };
 

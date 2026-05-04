@@ -29,6 +29,17 @@ export type FollowupRun = {
   transcriptPrompt?: string;
   /** Explicit current-turn context that should be visible for this run but not persisted as user text. */
   currentTurnContext?: CurrentTurnPromptContext;
+  /**
+   * Gateway/client idempotency run id for this turn (e.g. chat.send).
+   * Must be stored on the queued item: the drain callback is shared per queue key
+   * and would otherwise use the latest createFollowupRunner closure's opts.runId.
+   */
+  replyRunId?: string;
+  /**
+   * AbortSignal for this turn, captured when the message was enqueued.
+   * Same reason as replyRunId — the shared follow-up callback must not use a stale signal.
+   */
+  replyAbortSignal?: AbortSignal;
   /** Provider message ID, when available (for deduplication). */
   messageId?: string;
   summaryLine?: string;
