@@ -1569,6 +1569,18 @@ function canRequesterAbortChatRun(
   return false;
 }
 
+function sessionKeysMatch(key1: string, key2: string): boolean {
+  if (key1 === key2) return true;
+  // Also match if they resolve to the same canonical key (handles legacy/canonical variants)
+  try {
+    const { canonicalKey: canonical1 } = loadSessionEntry(key1);
+    const { canonicalKey: canonical2 } = loadSessionEntry(key2);
+    return canonical1 === canonical2;
+  } catch {
+    return false;
+  }
+}
+
 function resolveAuthorizedRunIdsForSession(params: {
   chatAbortControllers: Map<string, ChatAbortControllerEntry>;
   sessionKey: string;
@@ -1577,7 +1589,7 @@ function resolveAuthorizedRunIdsForSession(params: {
   const authorizedRunIds: string[] = [];
   let matchedSessionRuns = 0;
   for (const [runId, active] of params.chatAbortControllers) {
-    if (active.sessionKey !== params.sessionKey) {
+    if (!sessionKeysMatch(active.sessionKey, params.sessionKey)) {
       continue;
     }
     matchedSessionRuns += 1;
@@ -1620,9 +1632,11 @@ async function abortChatRunsForSessionKeyWithPartials(params: {
   });
   const runIds: string[] = [];
   for (const runId of authorizedRunIds) {
+    const active = params.context.chatAbortControllers.get(runId);
+    // Use the stored sessionKey to ensure abortChatRunById's internal check passes.
     const res = abortChatRunById(params.ops, {
       runId,
-      sessionKey: params.sessionKey,
+      sessionKey: active?.sessionKey ?? params.sessionKey,
       stopReason: params.stopReason,
     });
     if (res.aborted) {
@@ -1841,7 +1855,15 @@ export const chatHandlers: GatewayRequestHandlers = {
       respond(true, { ok: true, aborted: false, runIds: [] });
       return;
     }
-    if (active.sessionKey !== rawSessionKey) {
+    // Allow abort if sessionKey matches directly or resolves to the same canonical key.
+    // This handles cases where the stored sessionKey might be a legacy/canonical variant.
+    const { canonicalKey: callerCanonicalKey } = loadSessionEntry(rawSessionKey);
+    const { canonicalKey: storedCanonicalKey } = loadSessionEntry(active.sessionKey);
+    const sessionKeyMatches =
+      active.sessionKey === rawSessionKey ||
+      callerCanonicalKey === storedCanonicalKey ||
+      active.sessionKey === callerCanonicalKey;
+    if (!sessionKeyMatches) {
       respond(
         false,
         undefined,
@@ -1855,9 +1877,11 @@ export const chatHandlers: GatewayRequestHandlers = {
     }
 
     const partialText = context.chatRunBuffers.get(runId);
+    // Use the stored sessionKey to ensure abortChatRunById's internal check passes.
+    // The sessionKey compatibility was already verified above.
     const res = abortChatRunById(ops, {
       runId,
-      sessionKey: rawSessionKey,
+      sessionKey: active.sessionKey,
       stopReason: "rpc",
     });
     if (res.aborted && partialText && partialText.trim()) {

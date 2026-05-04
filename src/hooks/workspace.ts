@@ -85,7 +85,6 @@ function loadHookFromDir(params: {
     const name = frontmatter.name || params.nameHint || path.basename(params.hookDir);
     const description = frontmatter.description || "";
 
-    
     const handlerCandidates = ["handler.js", "index.js", "handler.ts", "index.ts"];
     let handlerPath: string | undefined;
     for (const candidate of handlerCandidates) {

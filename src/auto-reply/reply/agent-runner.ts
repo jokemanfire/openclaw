@@ -1030,8 +1030,9 @@ export async function runReplyAgent(params: {
     }
   }
 
+  const actualIsActive = isRunActive ? isRunActive() : isActive;
   const activeRunQueueAction = resolveActiveRunQueueAction({
-    isActive,
+    isActive: actualIsActive,
     isHeartbeat,
     shouldFollowup: effectiveShouldFollowup,
     queueMode: activeRunQueueMode,
@@ -1062,20 +1063,25 @@ export async function runReplyAgent(params: {
       resolvedQueue,
       "message-id",
       queuedRunFollowupTurn,
-      false,
+      true, // restartIfIdle = true - ensures queue drains when current run completes
     );
+    // chat.send resolves dispatchInboundMessage before the queued follow-up runs, so
+    // gateway onAgentRunStart never fires and chat.ts emits an empty "final" immediately.
+    // Signal that this runId is still active; the real assistant final comes from server-chat
+    // when the agent completes.
+    const deferredRunId = normalizeOptionalString(opts?.runId);
+    if (deferredRunId) {
+      void opts?.onAgentRunStart?.(deferredRunId);
+    }
     // Re-check liveness after enqueue so a stale active snapshot cannot leave
     // the followup queue idle if the original run already finished.
     const queuedBehindActiveRun = isRunActive?.() === true;
     if (!queuedBehindActiveRun) {
-      scheduleFollowupDrain(queueKey, queuedRunFollowupTurn);
+      finalizeWithFollowup(undefined, queueKey, queuedRunFollowupTurn);
     }
+
     await touchActiveSessionEntry();
-    if (queuedBehindActiveRun) {
-      await typingSignals.signalToolStart();
-    } else {
-      typing.cleanup();
-    }
+    typing.cleanup();
     return undefined;
   }
 

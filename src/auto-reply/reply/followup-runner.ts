@@ -222,7 +222,7 @@ export function createFollowupRunner(params: {
       upstreamAbortSignal: opts?.abortSignal,
     });
     try {
-      const runId = crypto.randomUUID();
+      const runId = opts?.runId ?? crypto.randomUUID();
       const shouldSurfaceToControlUi = isInternalMessageChannel(
         resolveOriginMessageProvider({
           originatingChannel: queued.originatingChannel,
