@@ -7,7 +7,7 @@ const execFileAsync = promisify(execFile);
 
 const AIKNOWLEDGE_PROVIDER_URI = "content://com.zte.ai.knowledge.provider";
 const METHOD_MEMORY_WRITE = "memory_write";
-const MEMORY_WRITE_TYPE_OPENCLAW = "openclaw_memory";
+const MEMORY_WRITE_SOURCE_OPENCLAW = "openclaw";
 const MEMORY_WRITE_CONTENT_MAX_UTF16 = Math.min(
   80_000,
   Number.parseInt(process.env.OPENCLAW_AIK_MEMORY_WRITE_MAX_CHARS ?? "80000", 10) || 80_000,
@@ -55,43 +55,44 @@ function resolveMemoryWriteCommandTemplate(cfg: OpenClawConfig): string | null {
   return fromCfg ?? fromProc;
 }
 
-function buildDefaultMemoryWriteCommandLine(sourceField: string, text: string): string {
-  const typeEx = escapeContentCallExtraValue(MEMORY_WRITE_TYPE_OPENCLAW);
-  const sourceEx = escapeContentCallExtraValue(sourceField);
-  const contentEx = escapeContentCallExtraValue(text);
+function buildDefaultMemoryWriteCommandLine(text: string): string {
   const emptyEx = escapeContentCallExtraValue("");
+  const typeEx = emptyEx;
+  const sourceEx = escapeContentCallExtraValue(MEMORY_WRITE_SOURCE_OPENCLAW);
+  const contentEx = escapeContentCallExtraValue(text);
   const parts = [
     "content call",
     `--uri ${AIKNOWLEDGE_PROVIDER_URI}`,
     `--method ${METHOD_MEMORY_WRITE}`,
-    `--extra "type:s:${typeEx}"`,
-    `--extra "source:s:${sourceEx}"`,
     `--extra "content:s:${contentEx}"`,
-    `--extra "img_uri:s:${emptyEx}"`,
+    `--extra "source:s:${sourceEx}"`,
+    `--extra "type:s:${typeEx}"`,
+    `--extra "img:s:${emptyEx}"`,
     `--extra "img_source:s:${emptyEx}"`,
+    `--extra "img_link:s:${emptyEx}"`,
+    `--extra "img_content:s:${emptyEx}"`,
   ];
   return parts.join(" ");
 }
 
-function buildMemoryWriteCommandLine(params: {
-  cfg: OpenClawConfig;
-  sourceField: string;
-  text: string;
-}): string {
+function buildMemoryWriteCommandLine(params: { cfg: OpenClawConfig; text: string }): string {
   const template = resolveMemoryWriteCommandTemplate(params.cfg);
   if (!template) {
-    return buildDefaultMemoryWriteCommandLine(params.sourceField, params.text);
+    return buildDefaultMemoryWriteCommandLine(params.text);
   }
-  const typeEx = escapeContentCallExtraValue(MEMORY_WRITE_TYPE_OPENCLAW);
-  const sourceEx = escapeContentCallExtraValue(params.sourceField);
-  const contentEx = escapeContentCallExtraValue(params.text);
   const emptyEx = escapeContentCallExtraValue("");
+  const typeEx = emptyEx;
+  const sourceEx = escapeContentCallExtraValue(MEMORY_WRITE_SOURCE_OPENCLAW);
+  const contentEx = escapeContentCallExtraValue(params.text);
   return template
     .replaceAll("{type}", typeEx)
     .replaceAll("{source}", sourceEx)
     .replaceAll("{content}", contentEx)
+    .replaceAll("{img}", emptyEx)
     .replaceAll("{img_uri}", emptyEx)
-    .replaceAll("{img_source}", emptyEx);
+    .replaceAll("{img_source}", emptyEx)
+    .replaceAll("{img_link}", emptyEx)
+    .replaceAll("{img_content}", emptyEx);
 }
 
 export async function notifyAiKnowledgeMemoryWriteViaAdb(
@@ -118,7 +119,6 @@ export async function notifyAiKnowledgeMemoryWriteViaAdb(
     );
     return;
   }
-  const sourceField = `${params.toolName}|${normalized}`;
   const utf16Units = text.length;
   if (utf16Units > MEMORY_WRITE_CONTENT_MAX_UTF16) {
     params.log.warn(
@@ -129,7 +129,6 @@ export async function notifyAiKnowledgeMemoryWriteViaAdb(
   if (params.config) {
     const commandLine = buildMemoryWriteCommandLine({
       cfg: params.config,
-      sourceField,
       text,
     });
     const outcome = await execShellCommand(commandLine, params.config, {
@@ -155,15 +154,19 @@ export async function notifyAiKnowledgeMemoryWriteViaAdb(
     "--method",
     METHOD_MEMORY_WRITE,
     "--extra",
-    `type:s:${escapeContentCallExtraValue(MEMORY_WRITE_TYPE_OPENCLAW)}`,
-    "--extra",
-    `source:s:${escapeContentCallExtraValue(sourceField)}`,
-    "--extra",
     `content:s:${escapeContentCallExtraValue(text)}`,
     "--extra",
-    `img_uri:s:${escapeContentCallExtraValue("")}`,
+    `source:s:${escapeContentCallExtraValue(MEMORY_WRITE_SOURCE_OPENCLAW)}`,
+    "--extra",
+    `type:s:${escapeContentCallExtraValue("")}`,
+    "--extra",
+    `img:s:${escapeContentCallExtraValue("")}`,
     "--extra",
     `img_source:s:${escapeContentCallExtraValue("")}`,
+    "--extra",
+    `img_link:s:${escapeContentCallExtraValue("")}`,
+    "--extra",
+    `img_content:s:${escapeContentCallExtraValue("")}`,
   ];
   try {
     await execFileAsync(adbBin, argv, {
