@@ -119,7 +119,6 @@ export function initializeGlobalHookRunner(registry: GlobalHookRunnerRegistry): 
           if (notifyAi) {
             void notifyAiKnowledgeMemoryWriteViaAdb({
               filePath: path,
-              toolName,
               memoryWriteUserBodyPlain: ctx.memoryWriteUserBodyPlain,
               config: ctx.config,
               log,
