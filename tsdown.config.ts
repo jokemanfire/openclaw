@@ -4,6 +4,7 @@ import { defineConfig, type UserConfig } from "tsdown";
 import {
   collectBundledPluginBuildEntries,
   collectRootPackageExcludedExtensionDirs,
+  listBundledPluginUnifiedGraphExternalDependencies,
   NON_PACKAGED_BUNDLED_PLUGIN_DIRS,
 } from "./scripts/lib/bundled-plugin-build-entries.mjs";
 import { buildPluginSdkEntrySources } from "./scripts/lib/plugin-sdk-entries.mjs";
@@ -253,12 +254,15 @@ const bundledHookEntries = buildBundledHookEntries();
 const bundledPluginRoot = (pluginId: string) => ["extensions", pluginId].join("/");
 const bundledPluginFile = (pluginId: string, relativePath: string) =>
   `${bundledPluginRoot(pluginId)}/${relativePath}`;
+const bundledPluginUnifiedGraphExternalDependencies =
+  listBundledPluginUnifiedGraphExternalDependencies();
 const explicitNeverBundleDependencies = [
   "@lancedb/lancedb",
   "@larksuiteoapi/node-sdk",
   "@matrix-org/matrix-sdk-crypto-nodejs",
   "matrix-js-sdk",
   "qrcode-terminal",
+  ...bundledPluginUnifiedGraphExternalDependencies,
 ].toSorted((left, right) => left.localeCompare(right));
 
 function shouldNeverBundleDependency(id: string): boolean {

@@ -191,3 +191,30 @@ export function listBundledPluginPackArtifacts(params = {}) {
 
   return [...artifacts].toSorted((left, right) => left.localeCompare(right));
 }
+
+/** Hardcoded: unified tsdown graph must not absorb this plugin's npm tree (Baileys). */
+const UNIFIED_GRAPH_EXTERNAL_DEPS_BUNDLED_PLUGIN_ID = "whatsapp";
+
+/**
+ * NPM dependency names for the WhatsApp bundled plugin only. The unified tsdown graph treats these
+ * as external so rollup does not absorb Baileys. Other plugins are intentionally not included here.
+ */
+export function listBundledPluginUnifiedGraphExternalDependencies(params = {}) {
+  const names = new Set();
+
+  for (const { id, packageJson } of collectBundledPluginBuildEntries(params)) {
+    if (id !== UNIFIED_GRAPH_EXTERNAL_DEPS_BUNDLED_PLUGIN_ID) {
+      continue;
+    }
+
+    for (const dependencyName of Object.keys(packageJson?.dependencies ?? {})) {
+      names.add(dependencyName);
+    }
+
+    for (const dependencyName of Object.keys(packageJson?.optionalDependencies ?? {})) {
+      names.add(dependencyName);
+    }
+  }
+
+  return [...names].toSorted((left, right) => left.localeCompare(right));
+}
