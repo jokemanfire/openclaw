@@ -10,8 +10,7 @@ import type { OpenClawConfig } from "../src/config/config.js";
 const WRITE_CLI_STARTUP_METADATA_DEBUG_RAW =
   process.env.OPENCLAW_WRITE_CLI_STARTUP_METADATA_DEBUG?.toLowerCase() ?? "";
 const WRITE_CLI_STARTUP_METADATA_DEBUG =
-  WRITE_CLI_STARTUP_METADATA_DEBUG_RAW !== "0" &&
-  WRITE_CLI_STARTUP_METADATA_DEBUG_RAW !== "false";
+  WRITE_CLI_STARTUP_METADATA_DEBUG_RAW !== "0" && WRITE_CLI_STARTUP_METADATA_DEBUG_RAW !== "false";
 
 function debugLog(message: string, detail?: Record<string, unknown>): void {
   if (!WRITE_CLI_STARTUP_METADATA_DEBUG) {
@@ -236,6 +235,10 @@ export async function renderBundledRootHelpText(
   if (!bundleIdentity) {
     throw new Error("No root-help bundle found in dist; cannot write CLI startup metadata.");
   }
+  // 仅构建环境跳过，用户运行不受影响
+  if (process.env.RPM_BUILD) {
+    return "";
+  }
   const moduleUrl = pathToFileURL(path.join(_distDirOverride, bundleIdentity.bundleName)).href;
   const renderOptions = {
     config: renderContext.config,
@@ -343,6 +346,10 @@ function renderSourceRootHelpText(
 function renderSourceBrowserHelpText(
   renderContext: RootHelpRenderContext = createIsolatedRootHelpRenderContext(),
 ): string {
+  // 仅构建环境跳过，用户运行不受影响
+  if (process.env.RPM_BUILD) {
+    return "";
+  }
   const browserCliUrl = pathToFileURL(
     path.join(rootDir, "extensions/browser/src/cli/browser-cli.ts"),
   ).href;
