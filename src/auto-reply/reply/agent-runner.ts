@@ -1077,7 +1077,7 @@ export async function runReplyAgent(params: {
     // the followup queue idle if the original run already finished.
     const queuedBehindActiveRun = isRunActive?.() === true;
     if (!queuedBehindActiveRun) {
-      finalizeWithFollowup(undefined, queueKey, queuedRunFollowupTurn);
+      scheduleFollowupDrain(queueKey, queuedRunFollowupTurn);
     }
 
     await touchActiveSessionEntry();

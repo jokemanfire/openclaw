@@ -21,8 +21,8 @@ export async function getMemorySearchManager(params: {
   if (!manager) {
     return { manager: null };
   }
-  const probeVectorStoreAvailability = manager.probeVectorStoreAvailability
-    ? async () => await manager.probeVectorStoreAvailability!()
+  const probeVectorStoreAvailability = manager.probeVectorAvailability
+    ? async () => await manager.probeVectorAvailability()
     : undefined;
   return {
     manager: {

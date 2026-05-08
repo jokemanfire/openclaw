@@ -35,9 +35,6 @@ patchedDependencies:
   '@agentclientprotocol/claude-agent-acp@0.32.0':
     hash: 1fe782f9679d7a725cbe59e51d61419fbb25d4c463d186c43c95644770cb2b98
     path: patches/@agentclientprotocol__claude-agent-acp@0.32.0.patch
-  '@whiskeysockets/baileys@7.0.0-rc.9':
-    hash: 23ec8efe1484afa57c51b96955ba331d1467521a8e676a18c2690da7e70a6201
-    path: patches/@whiskeysockets__baileys@7.0.0-rc.9.patch
 
 importers:
 
@@ -184,6 +181,18 @@ importers:
       qrcode:
         specifier: 1.5.4
         version: 1.5.4
+      qrcode-terminal:
+        specifier: ^0.12.0
+        version: 0.12.0
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
+      silk-wasm:
+        specifier: ^3.7.1
+        version: 3.7.1
+      sqlite-vec-native:
+        specifier: npm:sqlite-vec@0.1.9
+        version: sqlite-vec@0.1.9
       tar:
         specifier: 7.5.13
         version: 7.5.13
@@ -1533,31 +1542,6 @@ importers:
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
 
-  extensions/whatsapp:
-    dependencies:
-      '@whiskeysockets/baileys':
-        specifier: 7.0.0-rc.9
-        version: 7.0.0-rc.9(patch_hash=23ec8efe1484afa57c51b96955ba331d1467521a8e676a18c2690da7e70a6201)(audio-decode@2.2.3)(jimp@1.6.1)(sharp@0.34.5)
-      https-proxy-agent:
-        specifier: ^9.0.0
-        version: 9.0.0
-      jimp:
-        specifier: ^1.6.1
-        version: 1.6.1
-      typebox:
-        specifier: 1.1.37
-        version: 1.1.37
-      undici:
-        specifier: 8.2.0
-        version: 8.2.0
-    devDependencies:
-      '@openclaw/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      openclaw:
-        specifier: workspace:*
-        version: link:../..
-
   extensions/xai:
     dependencies:
       '@mariozechner/pi-ai':
@@ -2423,12 +2407,6 @@ packages:
     resolution: {integrity: sha512-rc1hOQtjIWGxcxpb9aHAfLpIctjEnsDehj0DAiVfBlmT84uvR0uUtN2hEi/ecvWVjXUGf5qPF4qEgiLOx1YIMQ==}
     engines: {node: '>=6'}
     hasBin: true
-
-  '@hapi/boom@9.1.4':
-    resolution: {integrity: sha512-Ls1oH8jaN1vNsqcaHVYJrKmgMcKsC1wcp8bujvXrHaAqD2iDYq3HoOwsxwo09Cuda5R5nC0o0IxlrlTuvPuzSw==}
-
-  '@hapi/hoek@9.3.0':
-    resolution: {integrity: sha512-/c6rf4UJlmHlC9b5BaNvzAcFv7HZ2QHaV0D4/HNlBdvFnvQq8RI4kYdhyPCl7Xj+oWvTWQ8ujhqS53LIgAe6KQ==}
 
   '@homebridge/ciao@1.3.8':
     resolution: {integrity: sha512-lNhpCsZVbdbjz2trFjQdzQ3cUIMZQMIMksi7wd3ntTIYgdaGLqT1Ms97DfVIJYHzRuduf56ISvgU8RRLTpK/ng==}
@@ -4355,35 +4333,6 @@ packages:
   '@wasm-audio-decoders/common@9.0.7':
     resolution: {integrity: sha512-WRaUuWSKV7pkttBygml/a6dIEpatq2nnZGFIoPTc5yPLkxL6Wk4YaslPM98OPQvWacvNZ+Py9xROGDtrFBDzag==}
 
-  '@wasm-audio-decoders/flac@0.2.10':
-    resolution: {integrity: sha512-YfcyoD2rYRBa6ffawZKNi5qvV5HArJmNmuMVUPoutuZ2hhGi6WNSWIzgvbROGmPbFivLL764Am7xxJENWJDhjw==}
-
-  '@wasm-audio-decoders/ogg-vorbis@0.1.20':
-    resolution: {integrity: sha512-zaQPasU5usRjUDXtXOHYED5tfkR4QMXd+EH3Nrz1+4+M5pCsdD+s9YxJqb0oqnTyRu/KUujOmu5Z/m/NT47vwg==}
-
-  '@wasm-audio-decoders/opus-ml@0.0.2':
-    resolution: {integrity: sha512-58rWEqDGg+CKCyEeKm2KoxxSwTWtHh/NLTW9ObR4K8CGF6VwuuGudEI1CtniS/oSRmL1nJq/eh8MKARiluw4DQ==}
-
-  '@whiskeysockets/baileys@7.0.0-rc.9':
-    resolution: {integrity: sha512-YFm5gKXfDP9byCXCW3OPHKXLzrAKzolzgVUlRosHHgwbnf2YOO3XknkMm6J7+F0ns8OA0uuSBhgkRHTDtqkacw==}
-    engines: {node: '>=20.0.0'}
-    peerDependencies:
-      audio-decode: ^2.1.3
-      jimp: ^1.6.0
-      link-preview-js: ^3.0.0
-      sharp: '*'
-    peerDependenciesMeta:
-      audio-decode:
-        optional: true
-      jimp:
-        optional: true
-      link-preview-js:
-        optional: true
-
-  '@whiskeysockets/libsignal-node@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/1c30d7d7e76a3b0aa120b04dc6a26f5a12dccf67':
-    resolution: {tarball: https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/1c30d7d7e76a3b0aa120b04dc6a26f5a12dccf67}
-    version: 2.0.1
-
   '@zed-industries/codex-acp-darwin-arm64@0.13.0':
     resolution: {integrity: sha512-SNJbpxOD1b98pK1Qw2pZjFJbfYBICheRs3mYvLMgHABehdypaeYKnEmEGp3Bu/gUT6JFAtOPRtaU+sfxKzgCvw==}
     cpu: [arm64]
@@ -4558,24 +4507,6 @@ packages:
 
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
-
-  atomic-sleep@1.0.0:
-    resolution: {integrity: sha512-kNOjDqAh7px0XWNI+4QbzoiR/nTkHAWNud2uvnJquD1/x5a7EQZMJT0AczqK0Qn67oY/TTQ1LbUKajZpp3I9tQ==}
-    engines: {node: '>=8.0.0'}
-
-  audio-buffer@5.0.0:
-    resolution: {integrity: sha512-gsDyj1wwUp8u7NBB+eW6yhLb9ICf+0eBmDX8NGaAS00w8/fLqFdxUlL5Ge/U8kB64DlQhdonxYC59dXy1J7H/w==}
-
-  audio-decode@2.2.3:
-    resolution: {integrity: sha512-Z0lHvMayR/Pad9+O9ddzaBJE0DrhZkQlStrC1RwcAHF3AhQAsdwKHeLGK8fYKyp2DDU6xHxzGb4CLMui12yVrg==}
-
-  audio-type@2.4.1:
-    resolution: {integrity: sha512-dK9Z/P83C/rBfTrXXgPD3jZ+aXxx2o/P4rq8+H1JqxbXklitEeJw4CrcwMC5CkON3CX3yy2gaWnIEVYejYh0zQ==}
-    engines: {node: '>=14'}
-
-  await-to-js@3.0.0:
-    resolution: {integrity: sha512-zJAaP9zxTcvTHRlejau3ZOY4V7SRpiByf3/dxx2uyKxxor19tpmpV2QRsTKikckwhaPmr2dVpxxMr7jOCYVp5g==}
-    engines: {node: '>=6.0.0'}
 
   axios@1.16.0:
     resolution: {integrity: sha512-6hp5CwvTPlN2A31g5dxnwAX0orzM7pmCRDLnZSX772mv8WDqICwFjowHuPs04Mc8deIld1+ejhtaMn5vp6b+1w==}
@@ -5388,7 +5319,7 @@ packages:
 
   glob@7.2.3:
     resolution: {integrity: sha512-nFR0zLpU2YCaRxwoCJvL6UvCH2JFyFVIvwTLsIf21AuHlMskA1hhTdk+LlYJtOlYt9v6dvszD2BGRqBL+iQK9Q==}
-    deprecated: Glob versions prior to v9 are no longer supported
+    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
   global-agent@4.1.3:
     resolution: {integrity: sha512-KUJEViiuFT3I97t+GYMikLPJS2Lfo/S2F+DQuBWzuzaMPnvt5yyZePzArx36fBzpGTxZjIpDbXLeySLgh+k76g==}
@@ -7558,9 +7489,6 @@ packages:
     peerDependencies:
       zod: ^3.25.28 || ^4
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
-
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
@@ -8788,12 +8716,6 @@ snapshots:
       long: 5.3.2
       protobufjs: 7.5.5
       yargs: 17.7.2
-
-  '@hapi/boom@9.1.4':
-    dependencies:
-      '@hapi/hoek': 9.3.0
-
-  '@hapi/hoek@9.3.0': {}
 
   '@homebridge/ciao@1.3.8':
     dependencies:
@@ -10787,49 +10709,6 @@ snapshots:
       '@eshaz/web-worker': 1.2.2
       simple-yenc: 1.0.4
 
-  '@wasm-audio-decoders/flac@0.2.10':
-    dependencies:
-      '@wasm-audio-decoders/common': 9.0.7
-      codec-parser: 2.5.0
-    optional: true
-
-  '@wasm-audio-decoders/ogg-vorbis@0.1.20':
-    dependencies:
-      '@wasm-audio-decoders/common': 9.0.7
-      codec-parser: 2.5.0
-    optional: true
-
-  '@wasm-audio-decoders/opus-ml@0.0.2':
-    dependencies:
-      '@wasm-audio-decoders/common': 9.0.7
-    optional: true
-
-  '@whiskeysockets/baileys@7.0.0-rc.9(patch_hash=23ec8efe1484afa57c51b96955ba331d1467521a8e676a18c2690da7e70a6201)(audio-decode@2.2.3)(jimp@1.6.1)(sharp@0.34.5)':
-    dependencies:
-      '@cacheable/node-cache': 1.7.6
-      '@hapi/boom': 9.1.4
-      async-mutex: 0.5.0
-      libsignal: '@whiskeysockets/libsignal-node@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/1c30d7d7e76a3b0aa120b04dc6a26f5a12dccf67'
-      lru-cache: 11.3.6
-      music-metadata: 11.12.3
-      p-queue: 9.2.0
-      pino: 9.14.0
-      protobufjs: 7.5.5
-      sharp: 0.34.5
-      ws: 8.20.0
-    optionalDependencies:
-      audio-decode: 2.2.3
-      jimp: 1.6.1
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
-  '@whiskeysockets/libsignal-node@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/1c30d7d7e76a3b0aa120b04dc6a26f5a12dccf67':
-    dependencies:
-      curve25519-js: 0.0.4
-      protobufjs: 7.5.5
-
   '@zed-industries/codex-acp-darwin-arm64@0.13.0':
     optional: true
 
@@ -10988,28 +10867,6 @@ snapshots:
   astring@1.9.0: {}
 
   asynckit@0.4.0: {}
-
-  atomic-sleep@1.0.0: {}
-
-  audio-buffer@5.0.0:
-    optional: true
-
-  audio-decode@2.2.3:
-    dependencies:
-      '@wasm-audio-decoders/flac': 0.2.10
-      '@wasm-audio-decoders/ogg-vorbis': 0.1.20
-      audio-buffer: 5.0.0
-      audio-type: 2.4.1
-      mpg123-decoder: 1.0.3
-      node-wav: 0.0.2
-      ogg-opus-decoder: 1.7.3
-      qoa-format: 1.0.1
-    optional: true
-
-  audio-type@2.4.1:
-    optional: true
-
-  await-to-js@3.0.0: {}
 
   axios@1.16.0:
     dependencies:
@@ -13900,7 +13757,6 @@ snapshots:
       sqlite-vec-linux-arm64: 0.1.9
       sqlite-vec-linux-x64: 0.1.9
       sqlite-vec-windows-x64: 0.1.9
-    optional: true
 
   stackback@0.0.2: {}
 
@@ -14447,8 +14303,6 @@ snapshots:
   zod-to-json-schema@3.25.2(zod@4.4.3):
     dependencies:
       zod: 4.4.3
-
-  zod@3.25.76: {}
 
   zod@4.4.3: {}
 
