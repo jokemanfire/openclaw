@@ -3,6 +3,17 @@ import { isBlockedObjectKey } from "./prototype-keys.js";
 
 type PlainObject = Record<string, unknown>;
 
+// Prefer JSON clone over `structuredClone` for config merge patches. Patch
+// entries are JSON-shaped values pulled out of user-provided `OpenClawConfig`
+// payloads and inserted into the merged array; repeated `structuredClone` on
+// long-lived config writers is the same native-memory growth path #45438
+// documented for the session-store cache. Local helper mirrors the secrets
+// runtime / cron service fixes; the eventual `infra/json-clone.ts` roll-up
+// can collapse them.
+function cloneJsonValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 type MergePatchOptions = {
   mergeObjectArraysById?: boolean;
 };
@@ -42,13 +53,13 @@ function mergeObjectArraysById(
 
   for (const patchEntry of patch) {
     if (!isObjectWithStringId(patchEntry)) {
-      merged.push(structuredClone(patchEntry));
+      merged.push(cloneJsonValue(patchEntry));
       continue;
     }
 
     const existingIndex = indexById.get(patchEntry.id);
     if (existingIndex === undefined) {
-      merged.push(structuredClone(patchEntry));
+      merged.push(cloneJsonValue(patchEntry));
       indexById.set(patchEntry.id, merged.length - 1);
       continue;
     }

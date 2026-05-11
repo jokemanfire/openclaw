@@ -221,6 +221,7 @@ Docs: https://docs.openclaw.ai
 - Agents/Pi: wait for embedded abort cleanup to settle before releasing the session write lock, preventing follow-up turns from racing previous prompt teardown. (#80239) Thanks @samzong.
 - WhatsApp: downgrade OpenClaw watchdog-triggered Web reconnects from runtime errors to recovery warnings and clear the recovered reconnect status after the next healthy connection. (#77026) Thanks @rubencu.
 - ACPX/Windows: hide the MCP proxy target child process window on Windows so ACP-backed agents do not flash or fail because of terminal window handling. Fixes #60672. (#60678) Thanks @KChow-ctrl.
+- Gateway/config writes: clone JSON merge patches, write-prepare diff payloads, and MCP config working copies through JSON instead of `structuredClone`, so high-frequency `config set` / `config patch` / `mcp` writers no longer accumulate native memory the same way the session-store cache fix #45438 / ae57eb635c addressed.
 
 ## 2026.5.9
 
