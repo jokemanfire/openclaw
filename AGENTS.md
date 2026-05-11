@@ -258,3 +258,15 @@
   - `node --import tsx scripts/release-check.ts`
   - `pnpm release:check`
   - `pnpm test:install:smoke` or `OPENCLAW_INSTALL_SMOKE_SKIP_NONROOT=1 pnpm test:install:smoke` for non-root smoke path.
+
+## Cursor Cloud specific instructions
+
+- **Update script** runs `pnpm install` on startup; all other commands (build, test, lint, gateway) are run on demand.
+- **Node 22+** and **pnpm 10.23+** are pre-installed via the VM image (nvm). No extra runtime setup needed.
+- **Lint/format/typecheck:** `pnpm check` (runs `oxfmt --check`, `pnpm tsgo`, `oxlint --type-aware`, plus project-specific lint scripts). See `package.json` scripts for individual commands.
+- **Tests:** `OPENCLAW_TEST_PROFILE=low OPENCLAW_TEST_SERIAL_GATEWAY=1 pnpm test` to avoid memory pressure on Cloud VMs. Standard `pnpm test` also works but may be slower.
+- **Build:** `pnpm build` produces `dist/` output. Required before using `node scripts/run-node.mjs` with built output, but dev commands (`pnpm openclaw ...`) run TypeScript directly via tsx.
+- **Gateway dev mode:** `OPENCLAW_SKIP_CHANNELS=1 pnpm gateway:dev` starts on `ws://127.0.0.1:19001` (no external channel tokens needed). Use `--dev` flag with CLI commands to target the dev gateway instance (e.g. `node scripts/run-node.mjs --dev health`).
+- **No external services required** for core development: SQLite is embedded (`node:sqlite`), no Docker/DB/queue needed. Channel tokens and LLM API keys are only needed for live/integration tests.
+- **macOS/iOS/Android apps** cannot be built in Cloud VMs (no Xcode/Android SDK); the TypeScript CLI + gateway is the in-scope development target.
+- **Ignored build scripts warning** (`@discordjs/opus`, `@tloncorp/tlon-skill`, `core-js`): safe to ignore; these are listed in `pnpm.onlyBuiltDependencies` and the warning is cosmetic.
