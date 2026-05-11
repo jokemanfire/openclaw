@@ -8,6 +8,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # 恢复默认颜色
 
+source scripts/zte/mobile-minimal.env
+
 echo -e "\n${YELLOW}=== [1/3] 远程连接真机编译 ===${NC}"
 
 # copy node_modules to root dir by WHL
@@ -20,7 +22,7 @@ tar -cf openclaw.tar.gz openclaw/
 
 adb connect 10.230.224.39:15002
 adb push openclaw.tar.gz /data/openclaw/
-adb shell "cd /data/openclaw && (./build.sh; echo \$? > build_result.tmp)"
+adb shell "cd /data/openclaw && OPENCLAW_EXCLUDE_BUNDLED_PLUGINS='${OPENCLAW_EXCLUDE_BUNDLED_PLUGINS}' ./build.sh; echo \$? > build_result.tmp"
 
 REMOTE_EXIT_CODE=$(adb shell "cat /data/openclaw/build_result.tmp" | tr -d '\r')
 if [ "$REMOTE_EXIT_CODE" != "0" ]; then

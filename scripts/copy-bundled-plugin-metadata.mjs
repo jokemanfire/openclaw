@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { NON_PACKAGED_BUNDLED_PLUGIN_DIRS } from "./lib/bundled-plugin-build-entries.mjs";
+import {
+  NON_PACKAGED_BUNDLED_PLUGIN_DIRS,
+  getEnvExcludedBundledPlugins,
+} from "./lib/bundled-plugin-build-entries.mjs";
 import { shouldBuildBundledCluster } from "./lib/optional-bundled-clusters.mjs";
 import {
   mergeGeneratedChannelConfigs,
@@ -239,6 +242,7 @@ export function copyBundledPluginMetadata(params = {}) {
 
   const generatedChannelConfigsByPlugin = readGeneratedBundledChannelConfigs(repoRoot);
   const sourcePluginDirs = new Set();
+  const envExcludedPlugins = getEnvExcludedBundledPlugins(env);
   for (const dirent of fs.readdirSync(extensionsRoot, { withFileTypes: true })) {
     if (!dirent.isDirectory()) {
       continue;
@@ -257,6 +261,10 @@ export function copyBundledPluginMetadata(params = {}) {
       continue;
     }
     if (!shouldBuildBundledCluster(dirent.name, env, { packageJson })) {
+      removePathIfExists(distPluginDir);
+      continue;
+    }
+    if (envExcludedPlugins.has(dirent.name)) {
       removePathIfExists(distPluginDir);
       continue;
     }

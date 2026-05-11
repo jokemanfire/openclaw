@@ -10,7 +10,19 @@ import { shouldBuildBundledCluster } from "./optional-bundled-clusters.mjs";
 const TOP_LEVEL_PUBLIC_SURFACE_EXTENSIONS = new Set([".ts", ".js", ".mts", ".cts", ".mjs", ".cjs"]);
 export const NON_PACKAGED_BUNDLED_PLUGIN_DIRS = new Set(["qa-channel", "qa-lab", "qa-matrix"]);
 const EXCLUDED_CORE_BUNDLED_PLUGIN_DIRS = new Set(["qqbot"]);
+const EXCLUDE_BUNDLED_PLUGINS_ENV = "OPENCLAW_EXCLUDE_BUNDLED_PLUGINS";
 const toPosixPath = (value) => value.replaceAll("\\", "/");
+
+export function getEnvExcludedBundledPlugins(env = process.env) {
+  const raw = env[EXCLUDE_BUNDLED_PLUGINS_ENV];
+  if (!raw || typeof raw !== "string") return new Set();
+  return new Set(
+    raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
 
 function readBundledPluginPackageJson(packageJsonPath) {
   if (!fs.existsSync(packageJsonPath)) {
@@ -87,6 +99,7 @@ export function collectBundledPluginBuildEntries(params = {}) {
   const env = params.env ?? process.env;
   const extensionsRoot = path.join(cwd, BUNDLED_PLUGIN_ROOT_DIR);
   const entries = [];
+  const envExcludedPlugins = getEnvExcludedBundledPlugins(env);
 
   for (const dirent of fs.readdirSync(extensionsRoot, { withFileTypes: true })) {
     if (!dirent.isDirectory()) {
@@ -113,6 +126,9 @@ export function collectBundledPluginBuildEntries(params = {}) {
       continue;
     }
     if (EXCLUDED_CORE_BUNDLED_PLUGIN_DIRS.has(dirent.name)) {
+      continue;
+    }
+    if (envExcludedPlugins.has(dirent.name)) {
       continue;
     }
 
