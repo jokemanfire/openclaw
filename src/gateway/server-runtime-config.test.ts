@@ -399,4 +399,138 @@ describe("resolveGatewayRuntimeConfig", () => {
       expect(result.strictTransportSecurityHeader).toBe(expected);
     });
   });
+
+  describe("transport mode and unix socket", () => {
+    let originalTransportMode: string | undefined;
+    let originalUnixSocketPath: string | undefined;
+
+    beforeEach(() => {
+      originalTransportMode = process.env.OPENCLAW_GATEWAY_TRANSPORT_MODE;
+      originalUnixSocketPath = process.env.OPENCLAW_GATEWAY_UNIX_SOCKET_PATH;
+      delete process.env.OPENCLAW_GATEWAY_TRANSPORT_MODE;
+      delete process.env.OPENCLAW_GATEWAY_UNIX_SOCKET_PATH;
+    });
+
+    afterEach(() => {
+      if (originalTransportMode !== undefined) {
+        process.env.OPENCLAW_GATEWAY_TRANSPORT_MODE = originalTransportMode;
+      } else {
+        delete process.env.OPENCLAW_GATEWAY_TRANSPORT_MODE;
+      }
+      if (originalUnixSocketPath !== undefined) {
+        process.env.OPENCLAW_GATEWAY_UNIX_SOCKET_PATH = originalUnixSocketPath;
+      } else {
+        delete process.env.OPENCLAW_GATEWAY_UNIX_SOCKET_PATH;
+      }
+      __resetContainerCacheForTest();
+      vi.restoreAllMocks();
+    });
+
+    describe("openclaw.json config priority", () => {
+      it("uses new logic when gateway.transportMode is configured", async () => {
+        const result = await resolveGatewayRuntimeConfig({
+          cfg: {
+            gateway: {
+              transportMode: "unix",
+              unixSocketPath: "/config/sock",
+              auth: { mode: "none" },
+            },
+          },
+          port: 18789,
+        });
+
+        expect(result.bindHost).toBe("unix");
+        expect(result.unixSocketPath).toBe("/config/sock");
+      });
+
+      it("uses new logic when both gateway.transportMode and gateway.unixSocketPath are configured", async () => {
+        const result = await resolveGatewayRuntimeConfig({
+          cfg: {
+            gateway: {
+              transportMode: "both",
+              unixSocketPath: "/config/sock",
+              auth: { mode: "token", token: "test" },
+              controlUi: { allowedOrigins: ["https://control.example.com"] },
+            },
+          },
+          port: 18789,
+        });
+
+        expect(result.unixSocketPath).toBe("/config/sock");
+        expect(result.bindHost).not.toBe("unix"); // TCP enabled
+      });
+
+      it("CLI unixSocketPath overrides openclaw.json config when transportMode is unix", async () => {
+        const result = await resolveGatewayRuntimeConfig({
+          cfg: {
+            gateway: {
+              transportMode: "unix",
+              unixSocketPath: "/config/sock",
+              auth: { mode: "none" },
+            },
+          },
+          port: 18789,
+          unixSocketPath: "/cli/sock",
+        });
+
+        expect(result.bindHost).toBe("unix");
+        expect(result.unixSocketPath).toBe("/cli/sock");
+      });
+
+      it("uses system defaults when openclaw.json has no transport config (backward compatible)", async () => {
+        // No gateway.transportMode or gateway.unixSocketPath in config
+        const result = await resolveGatewayRuntimeConfig({
+          cfg: { gateway: { auth: { mode: "none" } } },
+          port: 18789,
+        });
+
+        // Should use readGatewayUnixListenFromSystem() defaults
+        expect(result.unixSocketPath).toBe("/data/misc/openclaw/gateway.sock");
+        expect(result.bindHost).not.toBe("unix"); // system default tcpEnabled=true
+      });
+
+      it("uses original logic when only gateway.unixSocketPath is configured (no transportMode)", async () => {
+        const result = await resolveGatewayRuntimeConfig({
+          cfg: {
+            gateway: {
+              unixSocketPath: "/config/sock",
+              auth: { mode: "none" },
+            },
+          },
+          port: 18789,
+        });
+
+        // Only unixSocketPath configured without transportMode → uses original system logic
+        // System default: usPath + tcpEnabled=true → parallel TCP
+        expect(result.bindHost).not.toBe("unix"); // TCP enabled by system default
+        expect(result.unixSocketPath).toBe("/data/misc/openclaw/gateway.sock"); // system default, not config
+      });
+
+      it("explicit tcp transportMode in config disables unix socket", async () => {
+        const result = await resolveGatewayRuntimeConfig({
+          cfg: {
+            gateway: {
+              transportMode: "tcp",
+              auth: { mode: "none" },
+            },
+          },
+          port: 18789,
+        });
+
+        expect(result.unixSocketPath).toBeUndefined();
+        expect(result.bindHost).not.toBe("unix");
+      });
+
+      it("params unixSocketPath without tcpSocketEnabled → unix-only (backward compatible)", async () => {
+        const result = await resolveGatewayRuntimeConfig({
+          cfg: { gateway: { auth: { mode: "none" } } },
+          port: 18789,
+          unixSocketPath: "/params/sock",
+        });
+
+        expect(result.bindHost).toBe("unix");
+        expect(result.unixSocketPath).toBe("/params/sock");
+      });
+    });
+  });
 });

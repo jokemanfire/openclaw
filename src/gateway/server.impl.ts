@@ -471,7 +471,14 @@ export type GatewayServerOptions = {
    */
   tailscale?: import("../config/config.js").GatewayTailscaleConfig;
   /**
-   * Optional override for `resolveGatewayRuntimeConfig`; otherwise from getprop / env (see unix-config).
+   * Transport mode for gateway listening.
+   * - "tcp": TCP only (default)
+   * - "unix": Unix domain socket only
+   * - "both": Unix socket + TCP in parallel
+   */
+  transportMode?: "unix" | "tcp" | "both";
+  /**
+   * Unix domain socket path. Used when transportMode is "unix" or "both".
    */
   unixSocketPath?: string;
   tcpSocketEnabled?: boolean;

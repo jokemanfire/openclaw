@@ -781,6 +781,8 @@ export const OpenClawSchema = z
           ])
           .optional(),
         customBindHost: z.string().optional(),
+        transportMode: z.union([z.literal("unix"), z.literal("tcp"), z.literal("both")]).optional(),
+        unixSocketPath: z.string().optional(),
         controlUi: z
           .object({
             enabled: z.boolean().optional(),

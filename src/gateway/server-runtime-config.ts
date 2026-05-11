@@ -61,32 +61,67 @@ export async function resolveGatewayRuntimeConfig(params: {
 }): Promise<GatewayRuntimeConfig> {
   warnLegacyOpenClawEnvVars();
 
-  // Unix socket configuration
-  const sysUnix = readGatewayUnixListenFromSystem();
+  // Check if openclaw.json has gateway.transportMode configured
+  const hasConfigTransport = params.cfg.gateway?.transportMode !== undefined;
 
   let unixSocketPath: string | undefined;
-  if (params.unixSocketPath !== undefined) {
-    const t = params.unixSocketPath.trim();
-    unixSocketPath = t.length > 0 ? t : undefined;
-  } else {
-    const s = sysUnix.usPath?.trim();
-    unixSocketPath = s && s.length > 0 ? s : undefined;
-  }
-
-  /**
-   * Parallel TCP alongside Unix.
-   * - Caller passed `unixSocketPath` but not `tcpSocketEnabled` → unix-only (tests / explicit embed API).
-   * - Path from getprop/env/defaults only → follow {@link readGatewayUnixListenFromSystem} (default tcp true).
-   */
   let tcpSocketEnabledResolved: boolean;
-  if (params.tcpSocketEnabled !== undefined) {
-    tcpSocketEnabledResolved = params.tcpSocketEnabled === true;
-  } else if (params.unixSocketPath !== undefined) {
-    tcpSocketEnabledResolved = false;
-  } else if (sysUnix.tcpEnabled !== undefined) {
-    tcpSocketEnabledResolved = sysUnix.tcpEnabled === true;
+
+  if (hasConfigTransport) {
+    // Use config file transportMode only
+    const resolvedTransportMode =
+      (params.cfg.gateway?.transportMode as "unix" | "tcp" | "both") ?? "tcp";
+
+    // Infer tcpSocketEnabled from transportMode
+    switch (resolvedTransportMode) {
+      case "both":
+        tcpSocketEnabledResolved = true;
+        break;
+      case "unix":
+        tcpSocketEnabledResolved = false;
+        break;
+      case "tcp":
+      default:
+        tcpSocketEnabledResolved = true;
+        break;
+    }
+
+    // Resolve unixSocketPath: CLI params > config
+    // For tcp mode, unixSocketPath is ignored (backward compatible with original logic)
+    if (resolvedTransportMode === "tcp") {
+      unixSocketPath = undefined;
+    } else if (params.unixSocketPath !== undefined) {
+      const t = params.unixSocketPath.trim();
+      unixSocketPath = t.length > 0 ? t : undefined;
+    } else if (params.cfg.gateway?.unixSocketPath !== undefined) {
+      const t = params.cfg.gateway.unixSocketPath.trim();
+      unixSocketPath = t.length > 0 ? t : undefined;
+    }
   } else {
-    tcpSocketEnabledResolved = false;
+    // Unix socket configuration
+    const sysUnix = readGatewayUnixListenFromSystem();
+    if (params.unixSocketPath !== undefined) {
+      const t = params.unixSocketPath.trim();
+      unixSocketPath = t.length > 0 ? t : undefined;
+    } else {
+      const s = sysUnix.usPath?.trim();
+      unixSocketPath = s && s.length > 0 ? s : undefined;
+    }
+
+    /**
+     * Parallel TCP alongside Unix.
+     * - Caller passed `unixSocketPath` but not `tcpSocketEnabled` → unix-only (tests / explicit embed API).
+     * - Path from getprop/env/defaults only → follow {@link readGatewayUnixListenFromSystem} (default tcp true).
+     */
+    if (params.tcpSocketEnabled !== undefined) {
+      tcpSocketEnabledResolved = params.tcpSocketEnabled === true;
+    } else if (params.unixSocketPath !== undefined) {
+      tcpSocketEnabledResolved = false;
+    } else if (sysUnix.tcpEnabled !== undefined) {
+      tcpSocketEnabledResolved = sysUnix.tcpEnabled === true;
+    } else {
+      tcpSocketEnabledResolved = false;
+    }
   }
 
   const tcpSocketEnabledWithUnix = Boolean(unixSocketPath) && tcpSocketEnabledResolved;

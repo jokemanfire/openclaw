@@ -431,6 +431,18 @@ export type GatewayConfig = {
   bind?: GatewayBindMode;
   /** Custom IP address for bind="custom" mode. Fallback: 0.0.0.0. */
   customBindHost?: string;
+  /**
+   * Transport mode for gateway listening.
+   * - "tcp": TCP only (default)
+   * - "unix": Unix domain socket only
+   * - "both": Unix socket + TCP in parallel
+   * @default "tcp"
+   */
+  transportMode?: "unix" | "tcp" | "both";
+  /**
+   * Unix domain socket path. Required when transportMode is "unix" or "both".
+   */
+  unixSocketPath?: string;
   controlUi?: GatewayControlUiConfig;
   auth?: GatewayAuthConfig;
   tailscale?: GatewayTailscaleConfig;
