@@ -221,6 +221,7 @@ Docs: https://docs.openclaw.ai
 - Agents/Pi: wait for embedded abort cleanup to settle before releasing the session write lock, preventing follow-up turns from racing previous prompt teardown. (#80239) Thanks @samzong.
 - WhatsApp: downgrade OpenClaw watchdog-triggered Web reconnects from runtime errors to recovery warnings and clear the recovered reconnect status after the next healthy connection. (#77026) Thanks @rubencu.
 - ACPX/Windows: hide the MCP proxy target child process window on Windows so ACP-backed agents do not flash or fail because of terminal window handling. Fixes #60672. (#60678) Thanks @KChow-ctrl.
+- Gateway/secrets runtime: clone the long-lived `PreparedSecretsRuntimeSnapshot` (resolved config, source config, per-agent auth stores, and runtime web-tools metadata) through JSON instead of `structuredClone`, reusing one serialized config view for the two snapshot copies on every activate/get/refresh. This extends the session-store cache fix to the other long-lived runtime snapshot path tracked by Gateway RSS / native-memory growth in #45438.
 
 ## 2026.5.9
 
