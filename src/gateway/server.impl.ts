@@ -716,6 +716,7 @@ export async function startGatewayServer(
       openResponsesEnabled: opts.openResponsesEnabled,
       auth: opts.auth,
       tailscale: opts.tailscale,
+      transportMode: opts.transportMode,
       unixSocketPath: opts.unixSocketPath,
       tcpSocketEnabled: opts.tcpSocketEnabled,
     });
