@@ -62,7 +62,7 @@ export function buildGatewayConnectionDetailsWithResolvers(
 
   const urlSource = socketPathOverride
     ? cliSocketPathOverride
-      ? "cli --socket-path"
+      ? "cli --unix-socket-path"
       : "env OPENCLAW_GATEWAY_SOCKET_PATH"
     : urlOverride
       ? urlSourceHint === "env"

@@ -1796,7 +1796,7 @@ describe("buildGatewayConnectionDetails Unix socket support", () => {
     });
 
     expect(details.url).toBe("ws+unix:///tmp/openclaw-gateway.sock");
-    expect(details.urlSource).toBe("cli --socket-path");
+    expect(details.urlSource).toBe("cli --unix-socket-path");
     expect(details.bindDetail).toBeUndefined();
   });
 
@@ -1809,7 +1809,7 @@ describe("buildGatewayConnectionDetails Unix socket support", () => {
     });
 
     expect(details.url).toBe("ws+unix:///tmp/openclaw-gateway.sock");
-    expect(details.urlSource).toBe("cli --socket-path");
+    expect(details.urlSource).toBe("cli --unix-socket-path");
   });
 
   it("uses OPENCLAW_GATEWAY_SOCKET_PATH env var when set", () => {
@@ -1831,7 +1831,7 @@ describe("buildGatewayConnectionDetails Unix socket support", () => {
     });
 
     expect(details.url).toBe("ws+unix:///tmp/cli-override.sock");
-    expect(details.urlSource).toBe("cli --socket-path");
+    expect(details.urlSource).toBe("cli --unix-socket-path");
   });
 
   it("skips security check for Unix socket connections", () => {

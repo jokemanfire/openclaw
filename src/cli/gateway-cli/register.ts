@@ -413,7 +413,7 @@ export function registerGatewayCli(program: Command) {
       .description("Call a Gateway method")
       .argument("<method>", "Method name (health/status/system-presence/cron.*)")
       .option("--params <json>", "JSON object string for params", "{}")
-      .option("--socket-path <path>", "Unix socket path for local gateway connection")
+      .option("--unix-socket-path <path>", "Unix socket path for local gateway connection")
       .action(async (method, opts, command) => {
         await runGatewayCommand(async () => {
           const rpcOpts = resolveGatewayRpcOptions(opts, command);
@@ -459,7 +459,7 @@ export function registerGatewayCli(program: Command) {
     gateway
       .command("health")
       .description("Fetch Gateway health")
-      .option("--socket-path <path>", "Unix socket path for local gateway connection")
+      .option("--unix-socket-path <path>", "Unix socket path for local gateway connection")
       .action(async (opts, command) => {
         await runGatewayCommand(async () => {
           const rpcOpts = resolveGatewayRpcOptions(opts, command);
@@ -603,7 +603,7 @@ export function registerGatewayCli(program: Command) {
       "Show gateway reachability, auth capability, and read-probe summary (local + remote)",
     )
     .option("--url <url>", "Explicit Gateway WebSocket URL (still probes localhost)")
-    .option("--socket-path <path>", "Unix socket path for local gateway connection")
+    .option("--unix-socket-path <path>", "Unix socket path for local gateway connection")
     .option("--ssh <target>", "SSH target for remote gateway tunnel (user@host or user@host:port)")
     .option("--ssh-identity <path>", "SSH identity file path")
     .option("--ssh-auto", "Try to derive an SSH target from Bonjour discovery", false)
