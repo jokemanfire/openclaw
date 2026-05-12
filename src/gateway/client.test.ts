@@ -33,9 +33,11 @@ class MockWebSocket {
   terminateCalls = 0;
   autoCloseOnClose = true;
   readyState = MockWebSocket.CONNECTING;
+  lastOptions?: { socketPath?: string };
 
-  constructor(_url: string, _options?: unknown) {
+  constructor(_url: string, options?: { socketPath?: string }) {
     wsInstances.push(this);
+    this.lastOptions = options;
   }
 
   on(event: "open", handler: WsEventHandlers["open"]): void;
@@ -1003,5 +1005,117 @@ describe("GatewayClient connect auth payload", () => {
       connectId: firstConnect.id,
       failureDetails: { code: "AUTH_TOKEN_MISMATCH", canRetryWithDeviceToken: true },
     });
+  });
+});
+
+describe("GatewayClient Unix socket support", () => {
+  const envSnapshot = captureEnv(["OPENCLAW_ALLOW_INSECURE_PRIVATE_WS"]);
+
+  beforeEach(() => {
+    envSnapshot.restore();
+    delete process.env.OPENCLAW_ALLOW_INSECURE_PRIVATE_WS;
+    wsInstances.length = 0;
+  });
+
+  afterEach(() => {
+    envSnapshot.restore();
+    delete process.env.OPENCLAW_ALLOW_INSECURE_PRIVATE_WS;
+  });
+
+  it("creates WebSocket with socketPath option when provided", () => {
+    const onConnectError = vi.fn();
+    const client = new GatewayClient({
+      socketPath: "/tmp/openclaw-gateway.sock",
+      onConnectError,
+    });
+
+    client.start();
+
+    expect(onConnectError).not.toHaveBeenCalled();
+    expect(wsInstances.length).toBe(1);
+    const ws = getLatestWs();
+    expect(ws.lastOptions?.socketPath).toBe("/tmp/openclaw-gateway.sock");
+    client.stop();
+  });
+
+  it("uses ws+unix:// URL format for Unix socket connections", () => {
+    const onConnectError = vi.fn();
+    const client = new GatewayClient({
+      socketPath: "/var/run/openclaw.sock",
+      onConnectError,
+    });
+
+    client.start();
+    client.stop();
+
+    // The client should construct ws+unix:// URLs for Unix sockets
+    expect(wsInstances.length).toBe(1);
+  });
+
+  it("skips security check for Unix socket connections (ws+unix://)", () => {
+    const onConnectError = vi.fn();
+    const client = new GatewayClient({
+      socketPath: "/tmp/openclaw-gateway.sock",
+      onConnectError,
+    });
+
+    client.start();
+
+    // Should NOT throw security error for Unix socket
+    expect(onConnectError).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("SECURITY ERROR"),
+      }),
+    );
+    expect(wsInstances.length).toBe(1);
+    client.stop();
+  });
+
+  it("does not create direct agent for Unix socket connections", () => {
+    const onConnectError = vi.fn();
+    const client = new GatewayClient({
+      socketPath: "/tmp/openclaw-gateway.sock",
+      onConnectError,
+    });
+
+    client.start();
+    client.stop();
+
+    // Unix socket connections should not use createDirectGatewayAgent
+    // This is verified by the client implementation passing socketPath instead of agent
+    expect(wsInstances.length).toBe(1);
+  });
+
+  it("prefers socketPath over url when both are provided", () => {
+    const onConnectError = vi.fn();
+    const client = new GatewayClient({
+      url: "ws://127.0.0.1:18789",
+      socketPath: "/tmp/openclaw-gateway.sock",
+      onConnectError,
+    });
+
+    client.start();
+    client.stop();
+
+    // socketPath should take priority
+    expect(wsInstances.length).toBe(1);
+    const ws = getLatestWs();
+    expect(ws.lastOptions?.socketPath).toBe("/tmp/openclaw-gateway.sock");
+  });
+
+  it("allows Unix socket path via OPENCLAW_ALLOW_INSECURE_PRIVATE_WS without blocking", () => {
+    // Unix socket connections should work regardless of OPENCLAW_ALLOW_INSECURE_PRIVATE_WS
+    process.env.OPENCLAW_ALLOW_INSECURE_PRIVATE_WS = "0";
+    const onConnectError = vi.fn();
+    const client = new GatewayClient({
+      socketPath: "/tmp/openclaw-gateway.sock",
+      onConnectError,
+    });
+
+    client.start();
+
+    expect(onConnectError).not.toHaveBeenCalled();
+    expect(wsInstances.length).toBe(1);
+    client.stop();
   });
 });

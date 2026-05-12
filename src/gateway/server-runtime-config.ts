@@ -52,6 +52,10 @@ export async function resolveGatewayRuntimeConfig(params: {
   auth?: GatewayAuthConfig;
   tailscale?: GatewayTailscaleConfig;
   /**
+   * Transport mode override from CLI. Priority: CLI params > config > default ("tcp").
+   */
+  transportMode?: "unix" | "tcp" | "both";
+  /**
    * Optional overrides from `startGatewayServer` opts. When omitted, values come from
    * {@link readGatewayUnixListenFromSystem} (`getprop usPath` / `getprop tcpEnabled`, or
    * `OPENCLAW_GATEWAY_US_PATH` / `OPENCLAW_GATEWAY_TCP_ENABLED`). Not read from openclaw.json.
@@ -61,16 +65,19 @@ export async function resolveGatewayRuntimeConfig(params: {
 }): Promise<GatewayRuntimeConfig> {
   warnLegacyOpenClawEnvVars();
 
-  // Check if openclaw.json has gateway.transportMode configured
-  const hasConfigTransport = params.cfg.gateway?.transportMode !== undefined;
+  // Resolve transportMode: CLI params > config > default ("tcp")
+  const resolvedTransportMode =
+    params.transportMode ?? (params.cfg.gateway?.transportMode as "unix" | "tcp" | "both") ?? "tcp";
+
+  // Check if transportMode was explicitly set (CLI or config)
+  const hasConfigTransport =
+    params.transportMode !== undefined || params.cfg.gateway?.transportMode !== undefined;
 
   let unixSocketPath: string | undefined;
   let tcpSocketEnabledResolved: boolean;
 
   if (hasConfigTransport) {
-    // Use config file transportMode only
-    const resolvedTransportMode =
-      (params.cfg.gateway?.transportMode as "unix" | "tcp" | "both") ?? "tcp";
+    // Use resolved transportMode
 
     // Infer tcpSocketEnabled from transportMode
     switch (resolvedTransportMode) {

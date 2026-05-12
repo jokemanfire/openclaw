@@ -37,10 +37,12 @@ function resolveInstallOptions(
 function resolveRpcOptions(cmdOpts: GatewayRpcOpts, command?: Command): GatewayRpcOpts {
   const parentToken = inheritOptionFromParent<string>(command, "token");
   const parentPassword = inheritOptionFromParent<string>(command, "password");
+  const parentSocketPath = inheritOptionFromParent<string>(command, "socketPath");
   return {
     ...cmdOpts,
     token: cmdOpts.token ?? parentToken,
     password: cmdOpts.password ?? parentPassword,
+    socketPath: cmdOpts.socketPath ?? parentSocketPath,
   };
 }
 
@@ -60,6 +62,7 @@ export function addGatewayServiceCommands(parent: Command, opts?: { statusDescri
       opts?.statusDescription ?? "Show gateway service status + probe connectivity/capability",
     )
     .option("--url <url>", "Gateway WebSocket URL (defaults to config/remote/local)")
+    .option("--socket-path <path>", "Unix socket path for local gateway connection")
     .option("--token <token>", "Gateway token (if required)")
     .option("--password <password>", "Gateway password (password auth)")
     .option("--timeout <ms>", "Timeout in ms", "10000")

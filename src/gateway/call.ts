@@ -46,6 +46,7 @@ export type { GatewayConnectionDetails };
 
 type CallGatewayBaseOptions = {
   url?: string;
+  socketPath?: string;
   token?: string;
   password?: string;
   tlsFingerprint?: string;
@@ -204,6 +205,7 @@ export function buildGatewayConnectionDetails(
   options: {
     config?: OpenClawConfig;
     url?: string;
+    socketPath?: string;
     configPath?: string;
     urlSource?: "cli" | "env";
   } = {},
@@ -597,6 +599,7 @@ async function executeGatewayRequestWithScopes<T>(params: {
   opts: CallGatewayBaseOptions;
   scopes: OperatorScope[];
   url: string;
+  socketPath?: string;
   token?: string;
   password?: string;
   tlsFingerprint?: string;
@@ -609,6 +612,7 @@ async function executeGatewayRequestWithScopes<T>(params: {
     opts,
     scopes,
     url,
+    socketPath,
     token,
     password,
     tlsFingerprint,
@@ -638,6 +642,7 @@ async function executeGatewayRequestWithScopes<T>(params: {
 
     const client = gatewayCallDeps.createGatewayClient({
       url,
+      socketPath,
       token,
       password,
       tlsFingerprint,
@@ -652,7 +657,7 @@ async function executeGatewayRequestWithScopes<T>(params: {
       scopes,
       deviceIdentity:
         opts.deviceIdentity === undefined
-          ? resolveDeviceIdentityForGatewayCall({ opts, url, token, password })
+          ? resolveDeviceIdentityForGatewayCall({ opts, url: url, token, password })
           : opts.deviceIdentity,
       minProtocol: opts.minProtocol ?? PROTOCOL_VERSION,
       maxProtocol: opts.maxProtocol ?? PROTOCOL_VERSION,
@@ -747,6 +752,7 @@ async function callGatewayWithScopes<T = Record<string, unknown>>(
   const connectionDetails = buildGatewayConnectionDetails({
     config: context.config,
     url: context.urlOverride,
+    socketPath: opts.socketPath,
     urlSource: context.urlOverrideSource,
     ...(opts.configPath ? { configPath: opts.configPath } : {}),
   });
@@ -757,6 +763,7 @@ async function callGatewayWithScopes<T = Record<string, unknown>>(
     opts,
     scopes,
     url,
+    socketPath: opts.socketPath,
     token,
     password,
     tlsFingerprint,

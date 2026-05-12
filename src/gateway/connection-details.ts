@@ -21,6 +21,7 @@ export function buildGatewayConnectionDetailsWithResolvers(
   options: {
     config?: OpenClawConfig;
     url?: string;
+    socketPath?: string;
     configPath?: string;
     urlSource?: "cli" | "env";
   } = {},
@@ -40,31 +41,48 @@ export function buildGatewayConnectionDetailsWithResolvers(
   const scheme = tlsEnabled ? "wss" : "ws";
   const localUrl = `${scheme}://127.0.0.1:${localPort}`;
   const cliUrlOverride = normalizeOptionalString(options.url);
+  const cliSocketPathOverride = normalizeOptionalString(options.socketPath);
   const envUrlOverride = cliUrlOverride
     ? undefined
     : normalizeOptionalString(process.env.OPENCLAW_GATEWAY_URL);
+  const envSocketPathOverride = cliSocketPathOverride
+    ? undefined
+    : normalizeOptionalString(process.env.OPENCLAW_GATEWAY_SOCKET_PATH);
   const urlOverride = cliUrlOverride ?? envUrlOverride;
+  const socketPathOverride = cliSocketPathOverride ?? envSocketPathOverride;
   const remoteUrl = normalizeOptionalString(remote?.url);
   const remoteMisconfigured = isRemoteMode && !urlOverride && !remoteUrl;
   const urlSourceHint =
     options.urlSource ?? (cliUrlOverride ? "cli" : envUrlOverride ? "env" : undefined);
-  const url = urlOverride || remoteUrl || localUrl;
-  const urlSource = urlOverride
-    ? urlSourceHint === "env"
-      ? "env OPENCLAW_GATEWAY_URL"
-      : "cli --url"
-    : remoteUrl
-      ? "config gateway.remote.url"
-      : remoteMisconfigured
-        ? "missing gateway.remote.url (fallback local)"
-        : "local loopback";
-  const bindDetail = !urlOverride && !remoteUrl ? `Bind: ${bindMode}` : undefined;
+
+  // Resolve URL: socket path takes priority, then URL override, then remote, then local
+  const url = socketPathOverride
+    ? `ws+unix://${socketPathOverride}`
+    : urlOverride || remoteUrl || localUrl;
+
+  const urlSource = socketPathOverride
+    ? cliSocketPathOverride
+      ? "cli --socket-path"
+      : "env OPENCLAW_GATEWAY_SOCKET_PATH"
+    : urlOverride
+      ? urlSourceHint === "env"
+        ? "env OPENCLAW_GATEWAY_URL"
+        : "cli --url"
+      : remoteUrl
+        ? "config gateway.remote.url"
+        : remoteMisconfigured
+          ? "missing gateway.remote.url (fallback local)"
+          : "local loopback";
+
+  const bindDetail =
+    !urlOverride && !remoteUrl && !socketPathOverride ? `Bind: ${bindMode}` : undefined;
   const remoteFallbackNote = remoteMisconfigured
     ? "Warn: gateway.mode=remote but gateway.remote.url is missing; set gateway.remote.url or switch gateway.mode=local."
     : undefined;
 
   const allowPrivateWs = process.env.OPENCLAW_ALLOW_INSECURE_PRIVATE_WS === "1";
-  if (!isSecureWebSocketUrl(url, { allowPrivateWs })) {
+  // Skip security check for Unix socket connections
+  if (!socketPathOverride && !isSecureWebSocketUrl(url, { allowPrivateWs })) {
     throw new Error(
       [
         `SECURITY ERROR: Gateway URL "${url}" uses plaintext ws:// to a non-loopback address.`,

@@ -653,4 +653,54 @@ describe("gatherDaemonStatus", () => {
       staleGatewayPids: [9000],
     });
   });
+
+  it("uses ws+unix:// URL when rpcSocketPathOverride is provided", async () => {
+    const status = await gatherDaemonStatus({
+      rpc: { socketPath: "/tmp/openclaw-gateway.sock" },
+      probe: true,
+      deep: false,
+    });
+
+    expect(callGatewayStatusProbe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "ws+unix:///tmp/openclaw-gateway.sock",
+      }),
+    );
+    expect(status.gateway?.probeUrl).toBe("ws+unix:///tmp/openclaw-gateway.sock");
+  });
+
+  it("prefers socketPath over url when both are provided", async () => {
+    const status = await gatherDaemonStatus({
+      rpc: {
+        url: "ws://127.0.0.1:18789",
+        socketPath: "/tmp/openclaw-gateway.sock",
+      },
+      probe: true,
+      deep: false,
+    });
+
+    // socketPath should take priority
+    expect(callGatewayStatusProbe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "ws+unix:///tmp/openclaw-gateway.sock",
+      }),
+    );
+  });
+
+  it("passes socketPath to probe for Unix socket connections", async () => {
+    callGatewayStatusProbe.mockResolvedValueOnce({
+      ok: true,
+      url: "ws+unix:///tmp/openclaw-gateway.sock",
+      error: null,
+    });
+
+    const status = await gatherDaemonStatus({
+      rpc: { socketPath: "/tmp/openclaw-gateway.sock" },
+      probe: true,
+      deep: false,
+    });
+
+    expect(status.rpc?.url).toBe("ws+unix:///tmp/openclaw-gateway.sock");
+    expect(status.rpc?.ok).toBe(true);
+  });
 });

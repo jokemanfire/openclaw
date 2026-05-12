@@ -60,6 +60,8 @@ type GatewayRunOpts = {
   rawStreamPath?: unknown;
   dev?: boolean;
   reset?: boolean;
+  transportMode?: unknown;
+  unixSocketPath?: unknown;
 };
 
 const gatewayLog = createSubsystemLogger("gateway");
@@ -74,6 +76,8 @@ const GATEWAY_RUN_VALUE_KEYS = [
   "tailscale",
   "wsLog",
   "rawStreamPath",
+  "transportMode",
+  "unixSocketPath",
 ] as const;
 
 const GATEWAY_RUN_BOOLEAN_KEYS = [
@@ -640,6 +644,27 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
     defaultRuntime.exit(1);
     return;
   }
+
+  // Transport mode validation
+  const GATEWAY_TRANSPORT_MODES = ["tcp", "unix", "both"] as const;
+  const transportModeRaw = toOptionString(opts.transportMode);
+  const transportMode = parseEnumOption(transportModeRaw, GATEWAY_TRANSPORT_MODES);
+  if (transportModeRaw && !transportMode) {
+    defaultRuntime.error(
+      `Invalid --transport-mode (use ${formatModeErrorList(GATEWAY_TRANSPORT_MODES)})`,
+    );
+    defaultRuntime.exit(1);
+    return;
+  }
+  const unixSocketPathFromCli = toOptionString(opts.unixSocketPath);
+  if (unixSocketPathFromCli && !transportMode && !cfg.gateway?.transportMode) {
+    defaultRuntime.error(
+      "--unix-socket-path requires --transport-mode (unix|both) or gateway.transportMode in config",
+    );
+    defaultRuntime.exit(1);
+    return;
+  }
+
   // Now that Tailscale mode is known, compute the effective bind mode.
   const effectiveTailscaleMode = tailscaleMode ?? cfg.gateway?.tailscale?.mode ?? "off";
   const bind = (bindExplicitRaw ?? defaultGatewayBindMode(effectiveTailscaleMode)) as
@@ -782,6 +807,9 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
   gatewayLog.info("starting...");
   startupTrace.mark("cli.gateway-loop");
   const healthHost = await resolveGatewayBindHost(bind, cfg.gateway?.customBindHost);
+  const transportModeOverride = transportMode ? transportMode : undefined;
+  const unixSocketPathOverride = unixSocketPathFromCli;
+
   const startLoop = async () =>
     await runGatewayLoop({
       runtime: defaultRuntime,
@@ -792,6 +820,8 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
           bind,
           auth: authOverride,
           tailscale: tailscaleOverride,
+          transportMode: transportModeOverride,
+          unixSocketPath: unixSocketPathOverride,
           startupStartedAt,
           ...(startupConfigSnapshotRead ? { startupConfigSnapshotRead } : {}),
         }),
@@ -887,6 +917,14 @@ export function addGatewayRunCommand(cmd: Command): Command {
     .option("--compact", 'Alias for "--ws-log compact"', false)
     .option("--raw-stream", "Log raw model stream events to jsonl", false)
     .option("--raw-stream-path <path>", "Raw stream jsonl path")
+    .option(
+      "--transport-mode <mode>",
+      'Transport mode ("tcp"|"unix"|"both"). Defaults to config gateway.transportMode (or "tcp").',
+    )
+    .option(
+      "--unix-socket-path <path>",
+      "Unix domain socket path. Requires --transport-mode unix|both",
+    )
     .action(async (opts, command) => {
       await runGatewayCommand(resolveGatewayRunOptions(opts, command));
     });

@@ -23,6 +23,8 @@ const GATEWAY_RUN_VALUE_FLAGS = [
   "--raw-stream-path",
   "--tailscale",
   "--token",
+  "--transport-mode",
+  "--unix-socket-path",
   "--ws-log",
 ] as const;
 

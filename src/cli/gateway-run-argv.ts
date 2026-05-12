@@ -10,6 +10,8 @@ const GATEWAY_RUN_VALUE_FLAGS = new Set([
   "--tailscale",
   "--ws-log",
   "--raw-stream-path",
+  "--transport-mode",
+  "--unix-socket-path",
 ]);
 
 const GATEWAY_RUN_BOOLEAN_FLAGS = new Set([

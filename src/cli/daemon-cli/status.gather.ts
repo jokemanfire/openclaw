@@ -340,6 +340,7 @@ async function resolveGatewayStatusSummary(params: {
   mergedDaemonEnv: Record<string, string | undefined>;
   commandProgramArguments?: string[];
   rpcUrlOverride?: string;
+  rpcSocketPathOverride?: string;
 }): Promise<ResolvedGatewayStatus> {
   const portFromArgs = parsePortFromArgs(params.commandProgramArguments);
   const daemonPort = portFromArgs ?? resolveGatewayPort(params.daemonCfg, params.mergedDaemonEnv);
@@ -358,9 +359,12 @@ async function resolveGatewayStatusSummary(params: {
   });
   const probeHost = pickProbeHostForBind(bindMode, tailnetIPv4, customBindHost);
   const probeUrlOverride = trimToUndefined(params.rpcUrlOverride) ?? null;
+  const probeSocketPathOverride = trimToUndefined(params.rpcSocketPathOverride) ?? null;
   const tlsEnabled = params.daemonCfg.gateway?.tls?.enabled === true;
   const scheme = tlsEnabled ? "wss" : "ws";
-  const probeUrl = probeUrlOverride ?? `${scheme}://${probeHost}:${daemonPort}`;
+  const probeUrl = probeSocketPathOverride
+    ? `ws+unix://${probeSocketPathOverride}`
+    : (probeUrlOverride ?? `${scheme}://${probeHost}:${daemonPort}`);
   let probeNote =
     !probeUrlOverride && bindMode === "lan"
       ? `bind=lan listens on 0.0.0.0 (all interfaces); probing via ${probeHost}.`
@@ -459,6 +463,7 @@ export async function gatherDaemonStatus(
     mergedDaemonEnv,
     commandProgramArguments: command?.programArguments,
     rpcUrlOverride: opts.rpc.url,
+    rpcSocketPathOverride: opts.rpc.socketPath,
   });
   const { portStatus, portCliStatus } = await inspectDaemonPortStatuses({
     daemonPort,

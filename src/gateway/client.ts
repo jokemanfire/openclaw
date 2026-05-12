@@ -123,7 +123,12 @@ export class GatewayClientRequestError extends Error {
 }
 
 export type GatewayClientOptions = {
-  url?: string; // ws://127.0.0.1:18789
+  url?: string; // ws://127.0.0.1:18789 or ws+unix:///path/to/socket
+  /**
+   * Unix socket path for local gateway connections.
+   * When set, connects via Unix domain socket instead of TCP.
+   */
+  socketPath?: string;
   connectChallengeTimeoutMs?: number;
   /** @deprecated Use connectChallengeTimeoutMs. */
   connectDelayMs?: number;
@@ -260,7 +265,22 @@ export class GatewayClient {
     this.clearConnectChallengeTimeout();
     this.connectNonce = null;
     this.connectSent = false;
-    const url = this.opts.url ?? "ws://127.0.0.1:18789";
+
+    // Resolve URL: support both explicit URL and Unix socket path
+    let url: string;
+    let socketPath: string | undefined;
+
+    if (this.opts.socketPath) {
+      // Unix socket connection
+      socketPath = this.opts.socketPath;
+      // Use ws+unix:// scheme for Unix socket, or ws://localhost as placeholder
+      url = `ws+unix://${this.opts.socketPath}`;
+    } else {
+      // TCP connection (existing behavior)
+      url = this.opts.url ?? "ws://127.0.0.1:18789";
+      socketPath = undefined;
+    }
+
     if (this.opts.tlsFingerprint && !url.startsWith("wss://")) {
       this.opts.onConnectError?.(new Error("gateway tls fingerprint requires wss:// gateway url"));
       return;
@@ -268,9 +288,8 @@ export class GatewayClient {
 
     const allowPrivateWs = process.env.OPENCLAW_ALLOW_INSECURE_PRIVATE_WS === "1";
     // Security check: block ALL plaintext ws:// to non-loopback addresses (CWE-319, CVSS 9.8)
-    // This protects both credentials AND chat/conversation data from MITM attacks.
-    // Device tokens may be loaded later in sendConnect(), so we block regardless of hasCredentials.
-    if (!isSecureWebSocketUrl(url, { allowPrivateWs })) {
+    // Skip this check for Unix socket connections (ws+unix://)
+    if (!socketPath && !isSecureWebSocketUrl(url, { allowPrivateWs })) {
       // Safe hostname extraction - avoid throwing on malformed URLs in error path
       let displayHost = url;
       try {
@@ -292,9 +311,10 @@ export class GatewayClient {
       return;
     }
     // Allow node screen snapshots and other large responses.
-    const directAgent = createDirectGatewayAgent(url);
+    const directAgent = socketPath ? undefined : createDirectGatewayAgent(url);
     const wsOptions: FingerprintCheckingClientOptions = {
       maxPayload: 25 * 1024 * 1024,
+      ...(socketPath ? { socketPath } : {}),
       ...(directAgent ? { agent: directAgent } : {}),
     };
     if (url.startsWith("wss://") && this.opts.tlsFingerprint) {

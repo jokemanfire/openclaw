@@ -2,6 +2,7 @@ import type { FindExtraGatewayServicesOptions } from "../../daemon/inspect.js";
 
 export type GatewayRpcOpts = {
   url?: string;
+  socketPath?: string;
   token?: string;
   password?: string;
   timeout?: string;
