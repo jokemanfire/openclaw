@@ -1850,11 +1850,31 @@ export const chatHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const active = context.chatAbortControllers.get(runId);
+    let active = context.chatAbortControllers.get(runId);
+    let retryCount = 0;
+    const maxRetries = 8;
+    const retryDelayMs = 500;
+    
+    while (!active && retryCount < maxRetries) {
+      context.logGateway.warn(
+        `chat.abort: runId=${runId} not found in chatAbortControllers, retry ${retryCount + 1}/${maxRetries} in ${retryDelayMs}ms`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      active = context.chatAbortControllers.get(runId);
+      retryCount++;
+    }
+    
     if (!active) {
+      context.logGateway.warn(
+        `chat.abort: runId=${runId} still not found after ${maxRetries} retries, returning aborted=false`,
+      );
       respond(true, { ok: true, aborted: false, runIds: [] });
       return;
     }
+    
+    context.logGateway.info(
+      `chat.abort: runId=${runId} found in chatAbortControllers after ${retryCount} retries`,
+    );
     // Allow abort if sessionKey matches directly or resolves to the same canonical key.
     // This handles cases where the stored sessionKey might be a legacy/canonical variant.
     const { canonicalKey: callerCanonicalKey } = loadSessionEntry(rawSessionKey);
