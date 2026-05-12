@@ -1,0 +1,22 @@
+{
+  "id": "simple-task-handel",
+  "activation": {
+    "onStartup": true
+  },
+  "name": "Simple Task Handler",
+  "description": "Overrides system prompt for specific agents to act as a mobile task assistant.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "targetAgentId": {
+        "type": "string",
+        "description": "目标 Agent ID，插件只在匹配的 agent 上激活。默认 simple_task_agent。"
+      },
+      "skillClassify": {
+        "type": "string",
+        "description": "插件选择使用的skill分类映射方法，支持关键词与向量两种"
+      }
+    }
+  }
+}
