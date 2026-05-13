@@ -360,7 +360,15 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       },
     });
     if (preflight.shouldInitializeProvider) {
-      await this.ensureProviderInitialized();
+      // await this.ensureProviderInitialized();
+      // ZTE_HGJ_MEMORY_BEGIN
+      try {
+        await this.ensureProviderInitialized();
+      } catch (err) {
+        log.warn(`memory search: provider initialization failed, continuing in FTS-only mode: ${formatErrorMessage(err)}`);
+        this.providerInitialized = true;
+      }
+      // ZTE_HGJ_MEMORY_END
     }
 
     // ZTE_HGJ_MEMORY_BEGIN
