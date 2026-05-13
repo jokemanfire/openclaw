@@ -20,6 +20,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as v8 from "node:v8";
 import { abortable as productionAbortable } from "../src/agents/pi-embedded-runner/run/abortable.js";
+import { trimMalloc } from "../src/infra/memory-trim.js";
 
 type Mode = "production" | "closure-extracted" | "closure-inline" | "synthetic-leak";
 
@@ -219,6 +220,7 @@ async function settleAndGc(): Promise<void> {
   }
   await new Promise<void>((r) => setTimeout(r, 100));
   globalThis.gc?.();
+  trimMalloc();
 }
 
 type SampleRow = {
@@ -258,7 +260,9 @@ async function main(): Promise<void> {
   }
 
   await settleAndGc();
+  trimMalloc("pre-baseline");
   const baselinePath = takeSnapshot(opts.snapDir, "baseline");
+  trimMalloc("post-baseline-snap");
   const baseline: SampleRow = {
     label: "baseline",
     rssBytes: process.memoryUsage().rss,
@@ -281,7 +285,9 @@ async function main(): Promise<void> {
       totalIters += 1;
     }
     await settleAndGc();
+    trimMalloc(`pre-batch-${b}`);
     const snapshotPath = takeSnapshot(opts.snapDir, `batch-${b}`);
+    trimMalloc(`post-batch-${b}-snap`);
     const row: SampleRow = {
       label: `batch-${b}`,
       rssBytes: process.memoryUsage().rss,

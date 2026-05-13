@@ -1,5 +1,6 @@
 import type { HealthSummary } from "../commands/health.js";
 import { sweepStaleRunContexts } from "../infra/agent-events.js";
+import { trimMalloc } from "../infra/memory-trim.js";
 import { cleanOldMedia } from "../media/store.js";
 import { abortChatRunById, type ChatAbortControllerEntry } from "./chat-abort.js";
 import { pruneStaleControlPlaneBuckets } from "./control-plane-rate-limit.js";
@@ -8,6 +9,7 @@ import {
   DEDUPE_MAX,
   DEDUPE_TTL_MS,
   HEALTH_REFRESH_INTERVAL_MS,
+  MEMORY_TRIM_INTERVAL_MS,
   TICK_INTERVAL_MS,
 } from "./server-constants.js";
 import type { DedupeEntry } from "./server-shared.js";
@@ -50,6 +52,7 @@ export function startGatewayMaintenanceTimers(params: {
   healthInterval: ReturnType<typeof setInterval>;
   dedupeCleanup: ReturnType<typeof setInterval>;
   mediaCleanup: ReturnType<typeof setInterval> | null;
+  memoryTrimInterval: ReturnType<typeof setInterval>;
 } {
   setBroadcastHealthUpdate((snap: HealthSummary) => {
     params.broadcast("health", snap, {
@@ -79,6 +82,12 @@ export function startGatewayMaintenanceTimers(params: {
   void params
     .refreshGatewayHealthSnapshot({ probe: true })
     .catch((err) => params.logHealth.error(`initial refresh failed: ${formatError(err)}`));
+
+  // Periodic V8 last-resort GC to shrink the heap and release committed
+  // pages back to the OS. Requires --expose-gc on gateway startup.
+  const memoryTrimInterval = setInterval(() => {
+    trimMalloc("periodic");
+  }, MEMORY_TRIM_INTERVAL_MS);
 
   // dedupe cache cleanup
   const dedupeCleanup = setInterval(() => {
@@ -165,7 +174,7 @@ export function startGatewayMaintenanceTimers(params: {
   }, 60_000);
 
   if (typeof params.mediaCleanupTtlMs !== "number") {
-    return { tickInterval, healthInterval, dedupeCleanup, mediaCleanup: null };
+    return { tickInterval, healthInterval, dedupeCleanup, mediaCleanup: null, memoryTrimInterval };
   }
 
   let mediaCleanupInFlight: Promise<void> | null = null;
@@ -192,5 +201,5 @@ export function startGatewayMaintenanceTimers(params: {
 
   void runMediaCleanup();
 
-  return { tickInterval, healthInterval, dedupeCleanup, mediaCleanup };
+  return { tickInterval, healthInterval, dedupeCleanup, mediaCleanup, memoryTrimInterval };
 }
