@@ -389,30 +389,58 @@ export function createMemorySearchTool(options: {
                 hits: number;
               }
             | undefined;
-          if (shouldQueryMemory && memory && !("error" in memory)) {
-            // ZTE_HGJ_MEMORY_BEGIN
-            const searchOpts: Record<string, unknown> = {
-              minScore,
-              sessionKey: options.agentSessionKey,
-            };
-            if (typeof maxResults === "number" && Number.isFinite(maxResults)) {
-              searchOpts.maxResults = maxResults;
-            }
-            if (typeof fetchType === "number" && Number.isFinite(fetchType)) {
-              searchOpts.fetchType = fetchType;
-            }
-            if (meeting) {
-              searchOpts.meeting = meeting;
-            }
-            if (documents) {
-              searchOpts.documents = documents;
-            }
-            if (typeof providerQuery === "string" && providerQuery.trim().length > 0) {
-              searchOpts.providerQuery = providerQuery;
-            }
-            rawResults = await memory.manager.search(query, searchOpts as any);
-            // ZTE_HGJ_MEMORY_END
-            const status = memory.manager.status();
+            if (shouldQueryMemory && memory && !("error" in memory)) {
+              // ZTE_HGJ_MEMORY_BEGIN
+              const runtimeDebug: MemorySearchRuntimeDebug[] = [];
+              const qmdSearchModeOverride = resolveActiveMemoryQmdSearchModeOverride(
+                cfg,
+                options.agentSessionKey,
+              );
+              const searchSources: MemorySource[] | undefined =
+                requestedCorpus === "sessions"
+                  ? (["sessions"] as MemorySource[])
+                  : requestedCorpus === "memory"
+                    ? (["memory"] as MemorySource[])
+                    : undefined;
+              const searchOpts: Record<string, unknown> = {
+                minScore,
+                sessionKey: options.agentSessionKey,
+                qmdSearchModeOverride,
+                onDebug: (debug: MemorySearchRuntimeDebug) => {
+                  runtimeDebug.push(debug);
+                },
+                ...(searchSources ? { sources: searchSources } : {}),
+              };
+              if (typeof maxResults === "number" && Number.isFinite(maxResults)) {
+                searchOpts.maxResults = maxResults;
+              }
+              if (typeof fetchType === "number" && Number.isFinite(fetchType)) {
+                searchOpts.fetchType = fetchType;
+              }
+              if (meeting) {
+                searchOpts.meeting = meeting;
+              }
+              if (documents) {
+                searchOpts.documents = documents;
+              }
+              if (typeof providerQuery === "string" && providerQuery.trim().length > 0) {
+                searchOpts.providerQuery = providerQuery;
+              }
+              rawResults = await memory.manager.search(query, searchOpts as any);
+              // Apply session visibility filtering and corpus-based filtering
+              rawResults = await filterMemorySearchHitsBySessionVisibility({
+                cfg,
+                requesterSessionKey: options.agentSessionKey,
+                sandboxed: options.sandboxed === true,
+                hits: rawResults,
+              });
+              if (requestedCorpus === "sessions") {
+                rawResults = rawResults.filter((hit) => hit.source === "sessions");
+              } else if (requestedCorpus === "memory") {
+                rawResults = rawResults.filter((hit) => hit.source === "memory");
+              }
+              // ZTE_HGJ_MEMORY_END
+              const status = memory.manager.status();
             const decorated = decorateCitations(rawResults, includeCitations);
             const resolved = resolveMemoryBackendConfig({ cfg, agentId });
             const memoryResults =

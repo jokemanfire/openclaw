@@ -340,6 +340,7 @@ class BorrowedMemoryManager implements MemorySearchManager {
 
   async search(
     query: string,
+    // ZTE_HGJ_MEMORY_BEGIN
     opts?: {
       maxResults?: number;
       minScore?: number;
@@ -347,7 +348,12 @@ class BorrowedMemoryManager implements MemorySearchManager {
       qmdSearchModeOverride?: "query" | "search" | "vsearch";
       onDebug?: (debug: MemorySearchRuntimeDebug) => void;
       sources?: MemorySource[];
+      fetchType?: number;
+      meeting?: MemoryMeetingSearchOptions;
+      documents?: MemoryDocumentsSearchOptions;
+      providerQuery?: string;
     },
+    // ZTE_HGJ_MEMORY_END
   ) {
     return await this.inner.search(query, opts);
   }

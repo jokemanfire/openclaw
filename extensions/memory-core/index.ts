@@ -65,6 +65,28 @@ const MemorySearchSchema = {
     maxResults: { type: "number" },
     minScore: { type: "number" },
     corpus: { type: "string", enum: ["memory", "wiki", "all", "sessions"] },
+        // ZTE_HGJ_MEMORY_BEGIN
+        fetchType: { type: "number" },
+        providerQuery: { type: "string" },
+        meeting: {
+          type: "object",
+          properties: {
+            time: { type: "string" },
+            persons: { type: "string" },
+            title: { type: "string" },
+            location: { type: "string" },
+            isAbstract: { type: "boolean" },
+            isFutureMeeting: { type: "boolean" },
+          },
+        },
+        documents: {
+          type: "object",
+          properties: {
+            fileName: { type: "string" },
+          },
+          required: ["fileName"],
+        },
+        // ZTE_HGJ_MEMORY_END
   },
   required: ["query"],
   additionalProperties: false,

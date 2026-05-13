@@ -462,7 +462,72 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
         workspaceDir: this.workspaceDir,
       });
       const sorted = decayed.toSorted((a, b) => b.score - a.score);
-      return this.selectScoredResults(sorted, maxResults, minScore, 0);
+
+            // ZTE_HGJ_MEMORY_BEGIN
+            // Even in FTS-only mode, still query AIK provider if needed
+            const resolvedFetchType = typeof opts?.fetchType === "number" ? opts.fetchType : 1;
+            const shouldUseProvider =
+              Boolean(opts?.meeting) ||
+              Boolean(opts?.documents) ||
+              (Number.isFinite(resolvedFetchType) && resolvedFetchType !== 1);
+
+            if (!shouldUseProvider) {
+              return this.selectScoredResults(sorted, maxResults, minScore, 0);
+            }
+
+            // Query AIK provider even when local embedding is unavailable
+            const aiKnowledgeResults = await (opts?.meeting
+              ? queryAiKnowledgeOpenClawMeetingAsKeywordResults({
+                  cfg: this.cfg,
+                  query: providerQuery,
+                  limit: candidates,
+                  meeting: opts.meeting as any,
+                  logger: { info: (message: string) => log.info(message) },
+                })
+              : opts?.documents
+                ? queryAiKnowledgeOpenClawDocumentsAsKeywordResults({
+                    cfg: this.cfg,
+                    fileName: opts.documents.fileName,
+                    limit: candidates,
+                    logger: { info: (message: string) => log.info(message) },
+                  })
+                : queryAiKnowledgeOpenClawRagAsKeywordResults({
+                    cfg: this.cfg,
+                    query: providerQuery,
+                    limit: candidates,
+                    fetchType: resolvedFetchType,
+                    logger: { info: (message: string) => log.info(message) },
+                  })
+            ).catch((err) => {
+              log.warn(`AIK provider query failed in FTS-only mode: ${formatErrorMessage(err)}`);
+              return [];
+            });
+
+            log.info(
+              `[memory-recall] openclaw-local: keywordHits=${String(fullQueryResults.length)} vectorHits=0 shouldUseProvider=true fetchType=${String(resolvedFetchType)} aik-provider-raw=${String(aiKnowledgeResults.length)} (FTS-only mode)`,
+            );
+
+            const aiKnowledgeAsResults: MemorySearchResult[] = aiKnowledgeResults.map((r: any, i: number) => ({
+              path: r.path,
+              startLine: r.startLine,
+              endLine: r.endLine,
+              score: r.score,
+              snippet: r.snippet,
+              source: "memory",
+              citation:
+                typeof r?.path === "string" && r.path.trim().length > 0 ? `${r.path}#item-${String(i + 1)}` : undefined,
+            }));
+
+            return await fuseRecallResults({
+              primary: this.selectScoredResults(sorted, maxResults, minScore, 0),
+              secondary: aiKnowledgeAsResults,
+              maxResults,
+              cfg: this.cfg,
+              query: providerQuery,
+              logger: { info: (message: string) => log.info(message) },
+            });
+            // ZTE_HGJ_MEMORY_END
+      // return this.selectScoredResults(sorted, maxResults, minScore, 0);
     }
 
     // If FTS isn't available, hybrid mode cannot use keyword search; degrade to vector-only.
@@ -739,7 +804,18 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     if (this.closed) {
       return;
     }
-    await this.ensureProviderInitialized();
+    // await this.ensureProviderInitialized();
+    // ZTE_HGJ_MEMORY_BEGIN
+    // FTS-only mode should still allow syncing without embeddings
+    try {
+      await this.ensureProviderInitialized();
+    } catch (err) {
+      log.warn(`memory sync: provider initialization failed, continuing in FTS-only mode: ${formatErrorMessage(err)}`);
+      // Mark as initialized to prevent retry loops, even though provider is null
+      this.providerInitialized = true;
+    }
+    // ZTE_HGJ_MEMORY_END
+
     if (this.syncing) {
       if (params?.sessionFiles?.some((sessionFile) => sessionFile.trim().length > 0)) {
         return this.enqueueTargetedSessionSync(params.sessionFiles);
@@ -958,7 +1034,18 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       this.vector.semanticAvailable = false;
       return false;
     }
-    await this.ensureProviderInitialized();
+    // await this.ensureProviderInitialized();
+
+    // ZTE_HGJ_MEMORY_BEGIN
+    try {
+      await this.ensureProviderInitialized();
+    } catch (err) {
+      // Provider unavailable (e.g., "openai" not found), continue in FTS-only mode
+      this.vector.semanticAvailable = false;
+      return false;
+    }
+    // ZTE_HGJ_MEMORY_END
+
     // FTS-only mode: vector search not available
     if (!this.provider) {
       this.vector.semanticAvailable = false;
@@ -1011,7 +1098,20 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     if (cached) {
       return cached;
     }
-    await this.ensureProviderInitialized();
+    // await this.ensureProviderInitialized();
+
+    // ZTE_HGJ_MEMORY_BEGIN
+    try {
+      await this.ensureProviderInitialized();
+    } catch (err) {
+      // Provider unavailable (e.g., "openai" not found), return FTS-only mode result
+      return this.cacheProbeResult({
+        ok: false,
+        error: `Provider initialization failed: ${formatErrorMessage(err)}`,
+      });
+    }
+    // ZTE_HGJ_MEMORY_END
+
     // FTS-only mode: embeddings not available but search still works
     if (!this.provider) {
       return this.cacheProbeResult({
