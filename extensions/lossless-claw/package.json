@@ -1,0 +1,89 @@
+{
+  "name": "@martian-engineering/lossless-claw",
+  "version": "0.9.4",
+  "description": "Lossless Context Management plugin for OpenClaw — DAG-based conversation summarization with incremental compaction",
+  "keywords": [
+    "context-management",
+    "conversation-memory",
+    "dag",
+    "llm",
+    "openclaw",
+    "openclaw-plugin",
+    "summarization"
+  ],
+  "homepage": "https://github.com/Martian-Engineering/lossless-claw#readme",
+  "bugs": {
+    "url": "https://github.com/Martian-Engineering/lossless-claw/issues"
+  },
+  "license": "MIT",
+  "author": "Josh Lehman <josh@martian.engineering>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Martian-Engineering/lossless-claw.git"
+  },
+  "files": [
+    "dist/",
+    "skills/",
+    "openclaw.plugin.json",
+    "docs/",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "esbuild index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/index.js --external:openclaw --external:\"@mariozechner/*\" --minify-whitespace",
+    "changeset": "changeset",
+    "release:verify": "npm run build && npm test && npm pack --dry-run",
+    "test": "vitest run --dir test",
+    "version-packages": "changeset version"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "0.34.48"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.6.0",
+    "@changesets/cli": "^2.30.0",
+    "@mariozechner/pi-agent-core": "0.66.1",
+    "@mariozechner/pi-ai": "0.66.1",
+    "@mariozechner/pi-coding-agent": "0.66.1",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-agent-core": ">=0.66 <1",
+    "@mariozechner/pi-ai": ">=0.66 <1",
+    "@mariozechner/pi-coding-agent": ">=0.66 <1",
+    "openclaw": ">=2026.2.17 <2026.6.0"
+  },
+  "peerDependenciesMeta": {
+    "@mariozechner/pi-agent-core": {
+      "optional": true
+    },
+    "@mariozechner/pi-ai": {
+      "optional": true
+    },
+    "@mariozechner/pi-coding-agent": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.2.17 <2026.6.0",
+      "minGatewayVersion": "2026.2.17",
+      "tested": [
+        "2026.5.2"
+      ]
+    },
+    "build": {
+      "openclawVersion": "2026.2.17"
+    }
+  }
+}
