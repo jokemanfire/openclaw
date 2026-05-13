@@ -1,0 +1,38 @@
+{
+  "id": "terseness-prompt",
+  "activation": {
+    "onStartup": true
+  },
+  "name": "Terseness Prompt",
+  "description": "Injects terseness output style guidance into system prompt and user context",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "terseness": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["off", "on"]
+          },
+          "level": {
+            "type": "string",
+            "enum": ["normal", "lite", "full", "ultra"]
+          }
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Terseness Prompt",
+      "help": "When enabled, injects terseness guidance into the system prompt."
+    },
+    "terseness": {
+      "label": "Terseness Settings",
+      "help": "Configure the terseness mode and compression level."
+    }
+  }
+}
