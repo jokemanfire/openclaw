@@ -221,6 +221,7 @@ Docs: https://docs.openclaw.ai
 - Agents/Pi: wait for embedded abort cleanup to settle before releasing the session write lock, preventing follow-up turns from racing previous prompt teardown. (#80239) Thanks @samzong.
 - WhatsApp: downgrade OpenClaw watchdog-triggered Web reconnects from runtime errors to recovery warnings and clear the recovered reconnect status after the next healthy connection. (#77026) Thanks @rubencu.
 - ACPX/Windows: hide the MCP proxy target child process window on Windows so ACP-backed agents do not flash or fail because of terminal window handling. Fixes #60672. (#60678) Thanks @KChow-ctrl.
+- Gateway/infra: add defensive size caps on five long-lived process-scoped caches (ws-log inflight req/since/compact, Tailscale whois cache, session cost-usage refresh tracker, foreground reply fence tracker) so dropped-connection / missed-cleanup paths cannot grow them without bound. TTL semantics are preserved; the caps only kick in if delete-on-complete is skipped.
 
 ## 2026.5.9
 

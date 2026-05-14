@@ -248,6 +248,11 @@ type TailscaleWhoisCacheEntry = {
 };
 
 const whoisCache = new Map<string, TailscaleWhoisCacheEntry>();
+// Cap whois lookups so a Tailscale mesh with many short-lived peers (or a
+// scanner probing many IPs) cannot grow the cache without bound. Entries are
+// already TTL-expired on read; this is the size backstop for entries that
+// never get re-read before their TTL elapses.
+const WHOIS_CACHE_MAX_ENTRIES = 1000;
 
 function extractExecErrorText(err: unknown) {
   const errOutput = err as ExecErrorDetails;
@@ -556,6 +561,13 @@ function readCachedWhois(ip: string, now: number): TailscaleWhoisIdentity | null
 
 function writeCachedWhois(ip: string, value: TailscaleWhoisIdentity | null, ttlMs: number) {
   whoisCache.set(ip, { value, expiresAt: Date.now() + ttlMs });
+  while (whoisCache.size > WHOIS_CACHE_MAX_ENTRIES) {
+    const oldestKey = whoisCache.keys().next().value;
+    if (typeof oldestKey !== "string") {
+      break;
+    }
+    whoisCache.delete(oldestKey);
+  }
 }
 
 export async function readTailscaleWhoisIdentity(
