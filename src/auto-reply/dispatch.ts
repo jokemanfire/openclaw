@@ -37,6 +37,12 @@ type ForegroundReplyFenceSnapshot = {
 };
 
 const foregroundReplyFenceByKey = new Map<string, ForegroundReplyFenceState>();
+// Cap foreground fence tracking so an abandoned reply (where
+// `endForegroundReplyFence` never runs) cannot accumulate fence state per
+// (channel, account, session, target) tuple. The map is short-lived in normal
+// operation; this is a defensive ceiling against listener crashes that leave
+// fences orphaned.
+const MAX_FOREGROUND_REPLY_FENCES = 1000;
 
 function normalizeForegroundReplyFencePart(value: unknown): string | undefined {
   if (typeof value !== "string") {
@@ -86,6 +92,13 @@ function beginForegroundReplyFence(
   state.generation += 1;
   state.activeDispatches += 1;
   foregroundReplyFenceByKey.set(key, state);
+  while (foregroundReplyFenceByKey.size > MAX_FOREGROUND_REPLY_FENCES) {
+    const oldestKey = foregroundReplyFenceByKey.keys().next().value;
+    if (typeof oldestKey !== "string" || oldestKey === key) {
+      break;
+    }
+    foregroundReplyFenceByKey.delete(oldestKey);
+  }
   return {
     key,
     generation: state.generation,
