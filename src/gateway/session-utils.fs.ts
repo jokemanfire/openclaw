@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import { deriveSessionTotalTokens, hasNonzeroUsage, normalizeUsage } from "../agents/usage.js";
 import { jsonUtf8Bytes } from "../infra/json-utf8-bytes.js";
+import { materializeStringOrNullish } from "../infra/string-materialize.js";
 import { hasInterSessionUserProvenance } from "../sessions/input-provenance.js";
 import { extractAssistantVisibleText } from "../shared/chat-message-content.js";
 import { normalizeLowercaseStringOrEmpty } from "../shared/string-coerce.js";
@@ -66,8 +67,13 @@ function getCachedSessionTitleFields(cacheKey: string, stat: fs.Stats): SessionT
 }
 
 function setCachedSessionTitleFields(cacheKey: string, stat: fs.Stats, value: SessionTitleFields) {
+  // Materialize sliced V8 strings before retention. The title/preview values
+  // are extracted from large transcript head/tail read buffers; without this
+  // step a 40-char preview can pin the full read chunk for the lifetime of
+  // the cache entry (`MAX_SESSION_TITLE_FIELDS_CACHE_ENTRIES = 5000`).
   sessionTitleFieldsCache.set(cacheKey, {
-    ...value,
+    firstUserMessage: materializeStringOrNullish(value.firstUserMessage),
+    lastMessagePreview: materializeStringOrNullish(value.lastMessagePreview),
     mtimeMs: stat.mtimeMs,
     size: stat.size,
   });
