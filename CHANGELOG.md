@@ -221,6 +221,7 @@ Docs: https://docs.openclaw.ai
 - Agents/Pi: wait for embedded abort cleanup to settle before releasing the session write lock, preventing follow-up turns from racing previous prompt teardown. (#80239) Thanks @samzong.
 - WhatsApp: downgrade OpenClaw watchdog-triggered Web reconnects from runtime errors to recovery warnings and clear the recovered reconnect status after the next healthy connection. (#77026) Thanks @rubencu.
 - ACPX/Windows: hide the MCP proxy target child process window on Windows so ACP-backed agents do not flash or fail because of terminal window handling. Fixes #60672. (#60678) Thanks @KChow-ctrl.
+- Docs: document Node.js memory tuning for the Gateway (`--max-old-space-size`, `--max-semi-space-size`), the trajectory byte/writer budget env vars, and the opt-in heap-snapshot toggle in a new "Tune memory limits" section on the Gateway diagnostics page.
 
 ## 2026.5.9
 
