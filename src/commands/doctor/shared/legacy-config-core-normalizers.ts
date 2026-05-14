@@ -5,6 +5,7 @@ import { resolveNormalizedProviderModelMaxTokens } from "../../../config/default
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import { DEFAULT_GOOGLE_API_BASE_URL } from "../../../infra/google-api-base-url.js";
 import { DEFAULT_ACCOUNT_ID } from "../../../routing/session-key.js";
+import { cloneJsonValue } from "../../../infra/json-clone.js";
 import {
   normalizeOptionalLowercaseString,
   normalizeOptionalString,
@@ -78,7 +79,7 @@ export function normalizeLegacyBrowserConfig(
     return cfg;
   }
 
-  const browser = structuredClone(rawBrowser);
+  const browser = cloneJsonValue(rawBrowser);
   let browserChanged = false;
 
   if ("relayBindHost" in browser) {
@@ -194,7 +195,7 @@ export function seedMissingDefaultAccountsFromSingleAccountBase(
     const defaultAccount: Record<string, unknown> = {};
     for (const key of keysToMove) {
       const value = rawChannel[key];
-      defaultAccount[key] = value && typeof value === "object" ? structuredClone(value) : value;
+      defaultAccount[key] = value && typeof value === "object" ? cloneJsonValue(value) : value;
     }
     const nextChannel: Record<string, unknown> = {
       ...rawChannel,
@@ -568,7 +569,7 @@ export function normalizeLegacyNanoBananaSkill(
 
   let next = cfg;
   let skillsChanged = false;
-  const skills = structuredClone(rawSkills);
+  const skills = cloneJsonValue(rawSkills);
 
   if (Array.isArray(skills.allowBundled)) {
     const allowBundled = skills.allowBundled.filter(
@@ -634,12 +635,10 @@ export function normalizeLegacyNanoBananaSkill(
     (typeof rawLegacyEntry.apiKey === "string"
       ? normalizeOptionalString(rawLegacyEntry.apiKey)
       : rawLegacyEntry.apiKey && isRecord(rawLegacyEntry.apiKey)
-        ? structuredClone(rawLegacyEntry.apiKey)
+        ? cloneJsonValue(rawLegacyEntry.apiKey)
         : undefined);
 
-  const rawModels = (
-    isRecord(next.models) ? structuredClone(next.models) : {}
-  ) as ModelsConfigPatch;
+  const rawModels = (isRecord(next.models) ? cloneJsonValue(next.models) : {}) as ModelsConfigPatch;
   const rawProviders = (isRecord(rawModels.providers) ? { ...rawModels.providers } : {}) as Record<
     string,
     ModelProviderEntry
@@ -714,7 +713,7 @@ export function normalizeLegacyCrossContextMessageConfig(
 
   if (legacyAllowCrossContextSend) {
     const rawCrossContext = isRecord(nextMessage.crossContext)
-      ? structuredClone(nextMessage.crossContext)
+      ? cloneJsonValue(nextMessage.crossContext)
       : {};
     rawCrossContext.allowWithinProvider = true;
     rawCrossContext.allowAcrossProviders = true;
@@ -758,17 +757,17 @@ function migrateLegacyDeepgramCompat(params: {
   pathPrefix: string;
   changes: string[];
 }): boolean {
-  const rawCompat = isRecord(params.owner.deepgram) ? structuredClone(params.owner.deepgram) : null;
+  const rawCompat = isRecord(params.owner.deepgram) ? cloneJsonValue(params.owner.deepgram) : null;
   if (!rawCompat) {
     return false;
   }
 
   const compatProviderOptions = mapDeepgramCompatToProviderOptions(rawCompat);
   const currentProviderOptions = isRecord(params.owner.providerOptions)
-    ? structuredClone(params.owner.providerOptions)
+    ? cloneJsonValue(params.owner.providerOptions)
     : {};
   const currentDeepgram = isRecord(currentProviderOptions.deepgram)
-    ? structuredClone(currentProviderOptions.deepgram)
+    ? cloneJsonValue(currentProviderOptions.deepgram)
     : {};
   const mergedDeepgram = { ...compatProviderOptions, ...currentDeepgram };
 
@@ -799,7 +798,7 @@ export function normalizeLegacyMediaProviderOptions(
   }
 
   let mediaChanged = false;
-  const nextMedia = structuredClone(rawMedia);
+  const nextMedia = cloneJsonValue(rawMedia);
   const migrateModelList = (models: unknown, pathPrefix: string): boolean => {
     if (!Array.isArray(models)) {
       return false;
@@ -823,7 +822,7 @@ export function normalizeLegacyMediaProviderOptions(
   };
 
   for (const capability of ["audio", "image", "video"] as const) {
-    const config = isRecord(nextMedia[capability]) ? structuredClone(nextMedia[capability]) : null;
+    const config = isRecord(nextMedia[capability]) ? cloneJsonValue(nextMedia[capability]) : null;
     if (!config) {
       continue;
     }

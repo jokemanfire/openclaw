@@ -22,6 +22,7 @@ import { resolveCronSessionTargetSessionKey } from "../cron/session-target.js";
 import { resolveCronStorePath } from "../cron/store.js";
 import type { CronJob } from "../cron/types.js";
 import { formatErrorMessage } from "../infra/errors.js";
+import { cloneJsonValue } from "../infra/json-clone.js";
 import { runHeartbeatOnce } from "../infra/heartbeat-runner.js";
 import { requestHeartbeat } from "../infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
@@ -67,10 +68,10 @@ function toPluginCronJob(job: CronJob): PluginHookGatewayCronJob {
     name: job.name,
     description: job.description,
     enabled: job.enabled,
-    schedule: job.schedule ? structuredClone(job.schedule) : undefined,
+    schedule: job.schedule ? cloneJsonValue(job.schedule) : undefined,
     sessionTarget: job.sessionTarget,
     wakeMode: job.wakeMode,
-    payload: job.payload ? structuredClone(job.payload) : undefined,
+    payload: job.payload ? cloneJsonValue(job.payload) : undefined,
     state: {
       nextRunAtMs: job.state.nextRunAtMs,
       runningAtMs: job.state.runningAtMs,

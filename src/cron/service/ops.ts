@@ -30,6 +30,7 @@ import type {
   CronSortDir,
 } from "./list-page-types.js";
 import { locked } from "./locked.js";
+import { cloneJsonValue } from "../../infra/json-clone.js";
 import type { CronServiceState } from "./state.js";
 import { ensureLoaded, persist, warnIfDisabled } from "./store.js";
 import {
@@ -354,7 +355,7 @@ export async function update(state: CronServiceState, id: string, patch: CronJob
     await ensureLoaded(state, { skipRecompute: true });
     const job = findJobOrThrow(state, id);
     const now = state.deps.nowMs();
-    const nextJob = structuredClone(job);
+    const nextJob = cloneJsonValue(job);
     applyJobPatch(nextJob, patch, { defaultAgentId: state.deps.defaultAgentId });
     if (nextJob.schedule.kind === "every") {
       const anchor = nextJob.schedule.anchorMs;
@@ -669,7 +670,7 @@ async function prepareManualRun(
       job,
       startedAt: preflight.now,
     });
-    const executionJob = structuredClone(job);
+    const executionJob = cloneJsonValue(job);
     return {
       ok: true,
       ran: true,
@@ -763,7 +764,7 @@ async function finishPreparedManualRun(
       : {
           enabled: job.enabled,
           updatedAtMs: job.updatedAtMs,
-          state: structuredClone(job.state),
+          state: cloneJsonValue(job.state),
         };
     const postRunRemoved = shouldDelete;
     // Isolated Telegram send can persist target writeback directly to disk.

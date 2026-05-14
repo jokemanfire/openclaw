@@ -7,6 +7,7 @@ import {
 import { replaceConfigFile } from "./mutate.js";
 import type { OpenClawConfig } from "./types.openclaw.js";
 import { validateConfigObjectWithPlugins } from "./validation.js";
+import { cloneJsonValue } from "../infra/json-clone.js";
 
 type ConfigMcpServers = ReturnType<typeof normalizeConfiguredMcpServers>;
 
@@ -43,7 +44,7 @@ export async function listConfiguredMcpServers(): Promise<ConfigMcpReadResult> {
   return {
     ok: true,
     path: snapshot.path,
-    config: structuredClone(sourceConfig),
+    config: cloneJsonValue(sourceConfig),
     mcpServers: normalizeConfiguredMcpServers(sourceConfig.mcp?.servers),
     baseHash: snapshot.hash,
   };
@@ -66,7 +67,7 @@ export async function setConfiguredMcpServer(params: {
     return loaded;
   }
 
-  const next = structuredClone(loaded.config);
+  const next = cloneJsonValue(loaded.config);
   const servers = normalizeConfiguredMcpServers(next.mcp?.servers);
   servers[name] = canonicalizeConfiguredMcpServer(params.server);
   next.mcp = {
@@ -117,7 +118,7 @@ export async function unsetConfiguredMcpServer(params: {
     };
   }
 
-  const next = structuredClone(loaded.config);
+  const next = cloneJsonValue(loaded.config);
   const servers = normalizeConfiguredMcpServers(next.mcp?.servers);
   delete servers[name];
   if (Object.keys(servers).length > 0) {

@@ -4,6 +4,7 @@ import { formatCliCommand } from "../cli/command-format.js";
 import { resolveStateDir } from "../config/paths.js";
 import { resolveRuntimeServiceVersion } from "../version.js";
 import { writeJsonAtomic } from "./json-files.js";
+import { cloneJsonValue } from "./json-clone.js";
 
 export type RestartSentinelLog = {
   stdoutTail?: string | null;
@@ -93,7 +94,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function cloneRestartSentinelPayload(payload: RestartSentinelPayload): RestartSentinelPayload {
-  return JSON.parse(JSON.stringify(payload)) as RestartSentinelPayload;
+  return cloneJsonValue(payload);
 }
 
 async function rewriteRestartSentinel(

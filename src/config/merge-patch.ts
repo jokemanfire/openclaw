@@ -1,4 +1,5 @@
 import { isPlainObject } from "../infra/plain-object.js";
+import { cloneJsonValue } from "../infra/json-clone.js";
 import { isBlockedObjectKey } from "./prototype-keys.js";
 
 type PlainObject = Record<string, unknown>;
@@ -42,13 +43,13 @@ function mergeObjectArraysById(
 
   for (const patchEntry of patch) {
     if (!isObjectWithStringId(patchEntry)) {
-      merged.push(structuredClone(patchEntry));
+      merged.push(cloneJsonValue(patchEntry));
       continue;
     }
 
     const existingIndex = indexById.get(patchEntry.id);
     if (existingIndex === undefined) {
-      merged.push(structuredClone(patchEntry));
+      merged.push(cloneJsonValue(patchEntry));
       indexById.set(patchEntry.id, merged.length - 1);
       continue;
     }

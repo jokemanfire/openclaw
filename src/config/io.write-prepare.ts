@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { cloneJsonValue } from "../infra/json-clone.js";
 import { isRecord } from "../utils.js";
 import { applyMergePatch } from "./merge-patch.js";
 import { isBlockedObjectKey } from "./prototype-keys.js";
@@ -9,13 +10,9 @@ const OPEN_DM_POLICY_ALLOW_FROM_RE =
 
 const MANAGED_CONFIG_UNSET_PATHS = [["plugins", "installs"]] as const;
 
-function cloneUnknown<T>(value: T): T {
-  return structuredClone(value);
-}
-
 export function createMergePatch(base: unknown, target: unknown): unknown {
   if (!isRecord(base) || !isRecord(target)) {
-    return cloneUnknown(target);
+    return cloneJsonValue(target);
   }
 
   const patch: Record<string, unknown> = {};
@@ -29,7 +26,7 @@ export function createMergePatch(base: unknown, target: unknown): unknown {
     }
     const targetValue = target[key];
     if (!hasBase) {
-      patch[key] = cloneUnknown(targetValue);
+      patch[key] = cloneJsonValue(targetValue);
       continue;
     }
     const baseValue = base[key];
@@ -42,7 +39,7 @@ export function createMergePatch(base: unknown, target: unknown): unknown {
       continue;
     }
     if (!isDeepStrictEqual(baseValue, targetValue)) {
-      patch[key] = cloneUnknown(targetValue);
+      patch[key] = cloneJsonValue(targetValue);
     }
   }
   return patch;
@@ -50,13 +47,13 @@ export function createMergePatch(base: unknown, target: unknown): unknown {
 
 export function projectSourceOntoRuntimeShape(source: unknown, runtime: unknown): unknown {
   if (!isRecord(source) || !isRecord(runtime)) {
-    return cloneUnknown(source);
+    return cloneJsonValue(source);
   }
 
   const next: Record<string, unknown> = {};
   for (const [key, sourceValue] of Object.entries(source)) {
     if (!(key in runtime)) {
-      next[key] = cloneUnknown(sourceValue);
+      next[key] = cloneJsonValue(sourceValue);
       continue;
     }
     next[key] = projectSourceOntoRuntimeShape(sourceValue, runtime[key]);
@@ -111,7 +108,7 @@ function getPathValue(value: unknown, path: string[]): unknown {
 
 function setPathValue(value: unknown, path: string[], nextValue: unknown): unknown {
   if (path.length === 0) {
-    return cloneUnknown(nextValue);
+    return cloneJsonValue(nextValue);
   }
   if (!isRecord(value)) {
     return value;
@@ -143,7 +140,7 @@ function isIncludeOwnedPath(rootAuthoredConfig: unknown, path: string[]): boolea
 
 function setPathValueCreatingParents(value: unknown, path: string[], nextValue: unknown): unknown {
   if (path.length === 0) {
-    return cloneUnknown(nextValue);
+    return cloneJsonValue(nextValue);
   }
   const [head, ...tail] = path;
   const record = isRecord(value) ? value : {};

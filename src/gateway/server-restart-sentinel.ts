@@ -8,6 +8,7 @@ import type { CliDeps } from "../cli/deps.types.js";
 import { resolveMainSessionKeyFromConfig } from "../config/sessions.js";
 import { parseSessionThreadInfo } from "../config/sessions/thread-info.js";
 import { formatErrorMessage } from "../infra/errors.js";
+import { cloneJsonValue } from "../infra/json-clone.js";
 import { requestHeartbeat } from "../infra/heartbeat-wake.js";
 import { deliverOutboundPayloads } from "../infra/outbound/deliver.js";
 import { ackDelivery, enqueueDelivery, failDelivery } from "../infra/outbound/delivery-queue.js";
@@ -56,7 +57,7 @@ function cloneRestartSentinelPayload(
   if (!payload) {
     return null;
   }
-  return JSON.parse(JSON.stringify(payload)) as RestartSentinelPayload;
+  return cloneJsonValue(payload);
 }
 
 function hasRoutableDeliveryContext(context?: {
