@@ -1,0 +1,11 @@
+{
+  "id": "diagnostics-memory-dashboard",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
