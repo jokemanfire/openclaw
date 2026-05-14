@@ -48,7 +48,24 @@ type TrajectoryRuntimeRecorder = {
 };
 
 const writers = new Map<string, QueuedFileWriter>();
-const MAX_TRAJECTORY_WRITERS = 100;
+const DEFAULT_MAX_TRAJECTORY_WRITERS = 100;
+
+// Resolved at module-load time so a resource-constrained operator can lower
+// the concurrent trajectory writer ceiling via
+// `OPENCLAW_TRAJECTORY_MAX_WRITERS`. Values <= 0, non-numeric, or non-finite
+// fall back to the historical default; trajectory capture as a whole is
+// disabled via `OPENCLAW_TRAJECTORY=0` rather than `OPENCLAW_TRAJECTORY_MAX_WRITERS=0`.
+const MAX_TRAJECTORY_WRITERS = (() => {
+  const raw = process.env.OPENCLAW_TRAJECTORY_MAX_WRITERS?.trim();
+  if (!raw) {
+    return DEFAULT_MAX_TRAJECTORY_WRITERS;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_MAX_TRAJECTORY_WRITERS;
+  }
+  return Math.floor(parsed);
+})();
 const TRAJECTORY_RUNTIME_TRUNCATION_SENTINEL_RESERVE_BYTES = 2048;
 const TRAJECTORY_RUNTIME_DATA_STRING_MAX_CHARS = 32_768;
 const TRAJECTORY_RUNTIME_DATA_ARRAY_MAX_ITEMS = 64;

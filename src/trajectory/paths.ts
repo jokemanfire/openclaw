@@ -3,9 +3,47 @@ import path from "node:path";
 import { resolveHomeRelativePath } from "../infra/home-dir.js";
 import { isPathInside } from "../infra/path-guards.js";
 
-export const TRAJECTORY_RUNTIME_CAPTURE_MAX_BYTES = 10 * 1024 * 1024;
-export const TRAJECTORY_RUNTIME_FILE_MAX_BYTES = 50 * 1024 * 1024;
-export const TRAJECTORY_RUNTIME_EVENT_MAX_BYTES = 256 * 1024;
+const DEFAULT_TRAJECTORY_RUNTIME_CAPTURE_MAX_BYTES = 10 * 1024 * 1024;
+const DEFAULT_TRAJECTORY_RUNTIME_FILE_MAX_BYTES = 50 * 1024 * 1024;
+const DEFAULT_TRAJECTORY_RUNTIME_EVENT_MAX_BYTES = 256 * 1024;
+
+// Resolve a positive-integer byte budget from an env var, falling back to the
+// hard-coded default. Values <= 0, non-numeric, or non-finite fall back to the
+// default. Negative / zero is treated as invalid so an operator cannot
+// accidentally disable trajectory capture by writing `0`; explicit disable
+// still uses `OPENCLAW_TRAJECTORY=0` (handled elsewhere in the runtime).
+function resolveTrajectoryByteBudget(envValue: string | undefined, defaultBytes: number): number {
+  if (typeof envValue !== "string") {
+    return defaultBytes;
+  }
+  const trimmed = envValue.trim();
+  if (!trimmed) {
+    return defaultBytes;
+  }
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultBytes;
+  }
+  return Math.floor(parsed);
+}
+
+// Trajectory byte budgets are resolved at module-load time from env so a
+// resource-constrained operator can dial them down via
+// `OPENCLAW_TRAJECTORY_CAPTURE_MAX_BYTES` / `OPENCLAW_TRAJECTORY_FILE_MAX_BYTES`
+// / `OPENCLAW_TRAJECTORY_EVENT_MAX_BYTES`. Defaults match the historical
+// hard-coded values so existing deployments are not affected by this change.
+export const TRAJECTORY_RUNTIME_CAPTURE_MAX_BYTES = resolveTrajectoryByteBudget(
+  process.env.OPENCLAW_TRAJECTORY_CAPTURE_MAX_BYTES,
+  DEFAULT_TRAJECTORY_RUNTIME_CAPTURE_MAX_BYTES,
+);
+export const TRAJECTORY_RUNTIME_FILE_MAX_BYTES = resolveTrajectoryByteBudget(
+  process.env.OPENCLAW_TRAJECTORY_FILE_MAX_BYTES,
+  DEFAULT_TRAJECTORY_RUNTIME_FILE_MAX_BYTES,
+);
+export const TRAJECTORY_RUNTIME_EVENT_MAX_BYTES = resolveTrajectoryByteBudget(
+  process.env.OPENCLAW_TRAJECTORY_EVENT_MAX_BYTES,
+  DEFAULT_TRAJECTORY_RUNTIME_EVENT_MAX_BYTES,
+);
 
 type TrajectoryPointerOpenFlagConstants = Pick<
   typeof fs.constants,
