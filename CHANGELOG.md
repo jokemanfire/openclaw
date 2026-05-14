@@ -221,6 +221,7 @@ Docs: https://docs.openclaw.ai
 - Agents/Pi: wait for embedded abort cleanup to settle before releasing the session write lock, preventing follow-up turns from racing previous prompt teardown. (#80239) Thanks @samzong.
 - WhatsApp: downgrade OpenClaw watchdog-triggered Web reconnects from runtime errors to recovery warnings and clear the recovered reconnect status after the next healthy connection. (#77026) Thanks @rubencu.
 - ACPX/Windows: hide the MCP proxy target child process window on Windows so ACP-backed agents do not flash or fail because of terminal window handling. Fixes #60672. (#60678) Thanks @KChow-ctrl.
+- Gateway/secrets runtime: deep-freeze the published `PreparedSecretsRuntimeSnapshot` at activation time so `getActiveSecretsRuntimeSnapshot()` can return the shared frozen ref without paying a per-read clone. Eliminates the hot-path clone introduced by structuredClone/JSON-clone defenses against caller mutation; consumers were already read-only across the 18 callsites.
 
 ## 2026.5.9
 
