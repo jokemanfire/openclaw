@@ -189,6 +189,95 @@ diagnostic event collection:
 Disabling diagnostics reduces bug-report detail. It does not affect normal
 Gateway logging.
 
+## Tune memory limits
+
+OpenClaw runs on Node.js. The Gateway picks up standard Node memory flags via
+`NODE_OPTIONS`, plus a handful of OpenClaw-specific env knobs for trajectory
+capture and heap-snapshot collection. These are useful when:
+
+- you run the Gateway on a small VM (Fly micro, Mac mini self-host, Docker
+  with a tight memory limit) and the Node defaults overshoot the available RAM,
+- you observe `diagnostic.memory.pressure` events in stability data or logs
+  and want to investigate what is using the heap, or
+- you want to bound trajectory disk usage on a host that already has limited
+  storage.
+
+### Node.js heap and new-space limits
+
+```bash
+NODE_OPTIONS="--max-old-space-size=512 --max-semi-space-size=2"
+```
+
+- `--max-old-space-size=<MB>` caps V8 old-space (long-lived objects). Set this
+  below the host memory limit (for example `512` on a 1 GiB VM, `1024` on a
+  2 GiB VM) so V8 starts compacting before the OS OOM killer fires. The
+  default on 64-bit Linux is roughly 4 GiB.
+- `--max-semi-space-size=<MB>` caps V8 new-space (short-lived allocations).
+  Setting this to `2` (down from the default 16 on 64-bit Linux) reduces RSS
+  on workloads that produce many short-lived objects (channel listeners,
+  request handlers). Going below `2` slows scavenges noticeably; do not set
+  to `1` unless you have measured the trade-off.
+
+Set the env on the Gateway service before restart:
+
+```bash
+NODE_OPTIONS="--max-old-space-size=512 --max-semi-space-size=2" openclaw gateway restart
+```
+
+For systemd-managed Gateways, add the env to the service unit and run
+`openclaw gateway install --force` so the next restart picks it up.
+
+### Trajectory disk and memory budgets
+
+Trajectory capture is on by default. The hard byte ceilings can be tightened
+in resource-constrained deployments:
+
+- `OPENCLAW_TRAJECTORY_CAPTURE_MAX_BYTES` (default `10485760`, 10 MiB) — per
+  recorder in-memory + accepted byte ceiling.
+- `OPENCLAW_TRAJECTORY_FILE_MAX_BYTES` (default `52428800`, 50 MiB) — per
+  trajectory file size ceiling.
+- `OPENCLAW_TRAJECTORY_EVENT_MAX_BYTES` (default `262144`, 256 KiB) — per
+  event JSON line ceiling.
+- `OPENCLAW_TRAJECTORY_MAX_WRITERS` (default `100`) — concurrent writer cache
+  ceiling.
+
+A typical tightening for a 1 GiB VM:
+
+```bash
+OPENCLAW_TRAJECTORY_CAPTURE_MAX_BYTES=2097152 OPENCLAW_TRAJECTORY_MAX_WRITERS=20 openclaw gateway restart
+```
+
+Disable trajectory capture entirely with `OPENCLAW_TRAJECTORY=0`. Values
+outside the valid range (negative, zero, non-numeric) fall back to the
+default; `OPENCLAW_TRAJECTORY_MAX_WRITERS=0` does not disable capture.
+
+### Heap snapshot on critical memory pressure
+
+Gateway emits `diagnostic.memory.pressure` events at warning and critical
+levels (RSS / heap / growth thresholds, see [Stability recorder](#stability-recorder)).
+Operators can opt into automatic heap snapshots on critical pressure so the
+process state is preserved for post-mortem inspection:
+
+```bash
+OPENCLAW_MEMORY_HEAP_SNAPSHOT=1 openclaw gateway restart
+```
+
+Snapshots land in `~/.openclaw/diagnostics/heap/` with `0o700` directory
+permissions. Each successful snapshot writes a `diagnostic.memory.heap-snapshot`
+event with the resolved file path, byte size, and write duration. Snapshots
+are rate-limited to once per hour by default; tune the cooldown with:
+
+```bash
+OPENCLAW_MEMORY_HEAP_SNAPSHOT_COOLDOWN_MS=1800000   # 30 minutes
+```
+
+Heap snapshots are expensive (multi-second pause + tens to hundreds of MiB on
+disk). Leave the feature off in steady-state production; enable it when you
+are actively investigating an RSS-growth incident.
+
+Inspect snapshots with [Chrome DevTools](https://developer.chrome.com/docs/devtools/memory-problems/heap-snapshots/)
+(Memory tab → Load → pick the `.heapsnapshot` file).
+
 ## Related
 
 - [Health checks](/gateway/health)
