@@ -221,6 +221,7 @@ Docs: https://docs.openclaw.ai
 - Agents/Pi: wait for embedded abort cleanup to settle before releasing the session write lock, preventing follow-up turns from racing previous prompt teardown. (#80239) Thanks @samzong.
 - WhatsApp: downgrade OpenClaw watchdog-triggered Web reconnects from runtime errors to recovery warnings and clear the recovered reconnect status after the next healthy connection. (#77026) Thanks @rubencu.
 - ACPX/Windows: hide the MCP proxy target child process window on Windows so ACP-backed agents do not flash or fail because of terminal window handling. Fixes #60672. (#60678) Thanks @KChow-ctrl.
+- Trajectory: expose four byte/count budget knobs via env (`OPENCLAW_TRAJECTORY_CAPTURE_MAX_BYTES`, `OPENCLAW_TRAJECTORY_FILE_MAX_BYTES`, `OPENCLAW_TRAJECTORY_EVENT_MAX_BYTES`, `OPENCLAW_TRAJECTORY_MAX_WRITERS`) so resource-constrained operators can dial trajectory memory/disk usage without touching code. Defaults match the previous hard-coded values, so existing deployments are unaffected.
 
 ## 2026.5.9
 
