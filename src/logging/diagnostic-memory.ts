@@ -1,8 +1,13 @@
+import fs from "node:fs";
+import path from "node:path";
+import v8 from "node:v8";
+import { resolveStateDir } from "../config/paths.js";
 import {
   emitDiagnosticEvent,
   type DiagnosticMemoryPressureEvent,
   type DiagnosticMemoryUsage,
 } from "../infra/diagnostic-events.js";
+import { parseBooleanValue } from "../utils/boolean.js";
 
 const MB = 1024 * 1024;
 const DEFAULT_RSS_WARNING_BYTES = 1536 * MB;
@@ -13,6 +18,8 @@ const DEFAULT_RSS_GROWTH_WARNING_BYTES = 512 * MB;
 const DEFAULT_RSS_GROWTH_CRITICAL_BYTES = 1024 * MB;
 const DEFAULT_GROWTH_WINDOW_MS = 10 * 60 * 1000;
 const DEFAULT_PRESSURE_REPEAT_MS = 5 * 60 * 1000;
+const DEFAULT_HEAP_SNAPSHOT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+const HEAP_SNAPSHOT_DIR_NAME = "diagnostics/heap";
 
 type DiagnosticMemoryThresholds = {
   rssWarningBytes?: number;
@@ -33,12 +40,110 @@ type DiagnosticMemorySample = {
 type DiagnosticMemoryState = {
   lastSample: DiagnosticMemorySample | null;
   lastPressureAtByKey: Map<string, number>;
+  lastHeapSnapshotAtMs: number | null;
 };
 
 const state: DiagnosticMemoryState = {
   lastSample: null,
   lastPressureAtByKey: new Map(),
+  lastHeapSnapshotAtMs: null,
 };
+
+function isHeapSnapshotEnabled(): boolean {
+  return parseBooleanValue(process.env.OPENCLAW_MEMORY_HEAP_SNAPSHOT) === true;
+}
+
+function resolveHeapSnapshotCooldownMs(): number {
+  const raw = process.env.OPENCLAW_MEMORY_HEAP_SNAPSHOT_COOLDOWN_MS?.trim();
+  if (!raw) {
+    return DEFAULT_HEAP_SNAPSHOT_COOLDOWN_MS;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_HEAP_SNAPSHOT_COOLDOWN_MS;
+  }
+  return parsed;
+}
+
+function resolveHeapSnapshotDir(): string {
+  return path.join(resolveStateDir(), HEAP_SNAPSHOT_DIR_NAME);
+}
+
+// Heap snapshots are expensive (~seconds of pause + tens to hundreds of MB on
+// disk). The trigger is gated by:
+//   1. Operator opt-in: `OPENCLAW_MEMORY_HEAP_SNAPSHOT=1`.
+//   2. Critical-level memory pressure (warning levels do not trigger).
+//   3. Cooldown window (default 1 hour, env-tunable) to bound storage growth.
+// Any failure path emits a `diagnostic.memory.heap-snapshot` event with
+// `status` reflecting whether the snapshot was written, skipped, or errored.
+function maybeWriteHeapSnapshot(params: {
+  pressure: Omit<DiagnosticMemoryPressureEvent, "seq" | "ts" | "type">;
+  now: number;
+}): void {
+  if (params.pressure.level !== "critical") {
+    return;
+  }
+  if (!isHeapSnapshotEnabled()) {
+    emitDiagnosticEvent({
+      type: "diagnostic.memory.heap-snapshot",
+      status: "skipped",
+      reason: "disabled",
+      memory: params.pressure.memory,
+    });
+    return;
+  }
+  const cooldownMs = resolveHeapSnapshotCooldownMs();
+  if (state.lastHeapSnapshotAtMs !== null && params.now - state.lastHeapSnapshotAtMs < cooldownMs) {
+    emitDiagnosticEvent({
+      type: "diagnostic.memory.heap-snapshot",
+      status: "skipped",
+      reason: "cooldown",
+      memory: params.pressure.memory,
+    });
+    return;
+  }
+  const snapshotDir = resolveHeapSnapshotDir();
+  try {
+    fs.mkdirSync(snapshotDir, { recursive: true, mode: 0o700 });
+  } catch (error) {
+    emitDiagnosticEvent({
+      type: "diagnostic.memory.heap-snapshot",
+      status: "error",
+      reason: "write_failed",
+      memory: params.pressure.memory,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+  state.lastHeapSnapshotAtMs = params.now;
+  const startedAt = Date.now();
+  try {
+    const filePath = v8.writeHeapSnapshot(snapshotDir);
+    let bytes: number | undefined;
+    try {
+      bytes = fs.statSync(filePath).size;
+    } catch {
+      // Best effort; the snapshot path is the primary signal.
+    }
+    emitDiagnosticEvent({
+      type: "diagnostic.memory.heap-snapshot",
+      status: "written",
+      reason: "critical_pressure",
+      memory: params.pressure.memory,
+      filePath,
+      bytes,
+      durationMs: Date.now() - startedAt,
+    });
+  } catch (error) {
+    emitDiagnosticEvent({
+      type: "diagnostic.memory.heap-snapshot",
+      status: "error",
+      reason: "write_failed",
+      memory: params.pressure.memory,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 function normalizeMemoryUsage(memory: NodeJS.MemoryUsage): DiagnosticMemoryUsage {
   return {
@@ -186,6 +291,7 @@ export function emitDiagnosticMemorySample(options?: {
       type: "diagnostic.memory.pressure",
       ...pressure,
     });
+    maybeWriteHeapSnapshot({ pressure, now });
   }
   return memory;
 }
@@ -193,4 +299,5 @@ export function emitDiagnosticMemorySample(options?: {
 export function resetDiagnosticMemoryForTest(): void {
   state.lastSample = null;
   state.lastPressureAtByKey.clear();
+  state.lastHeapSnapshotAtMs = null;
 }

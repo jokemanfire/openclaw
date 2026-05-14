@@ -221,6 +221,7 @@ Docs: https://docs.openclaw.ai
 - Agents/Pi: wait for embedded abort cleanup to settle before releasing the session write lock, preventing follow-up turns from racing previous prompt teardown. (#80239) Thanks @samzong.
 - WhatsApp: downgrade OpenClaw watchdog-triggered Web reconnects from runtime errors to recovery warnings and clear the recovered reconnect status after the next healthy connection. (#77026) Thanks @rubencu.
 - ACPX/Windows: hide the MCP proxy target child process window on Windows so ACP-backed agents do not flash or fail because of terminal window handling. Fixes #60672. (#60678) Thanks @KChow-ctrl.
+- Diagnostics: add an opt-in `OPENCLAW_MEMORY_HEAP_SNAPSHOT=1` toggle that writes a `v8.writeHeapSnapshot()` to `~/.openclaw/diagnostics/heap/` when the gateway hits critical-level memory pressure (RSS / heap thresholds), with a 1-hour cooldown to bound storage. Disabled by default; emits a new `diagnostic.memory.heap-snapshot` event so operators can correlate snapshot files with the pressure event that triggered them.
 
 ## 2026.5.9
 

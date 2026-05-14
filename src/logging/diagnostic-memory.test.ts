@@ -199,4 +199,70 @@ describe("diagnostic memory", () => {
       ),
     ).toBe(1);
   });
+
+  it("skips heap snapshots by default when critical pressure fires", () => {
+    const events: DiagnosticEventPayload[] = [];
+    const stop = onDiagnosticEvent((event) => events.push(event));
+    const originalToggle = process.env.OPENCLAW_MEMORY_HEAP_SNAPSHOT;
+    delete process.env.OPENCLAW_MEMORY_HEAP_SNAPSHOT;
+    try {
+      emitDiagnosticMemorySample({
+        now: 1000,
+        memoryUsage: memoryUsage({ rss: 5000 }),
+        thresholds: {
+          rssWarningBytes: 1000,
+          rssCriticalBytes: 3000,
+          pressureRepeatMs: 60_000,
+        },
+      });
+    } finally {
+      if (originalToggle === undefined) {
+        delete process.env.OPENCLAW_MEMORY_HEAP_SNAPSHOT;
+      } else {
+        process.env.OPENCLAW_MEMORY_HEAP_SNAPSHOT = originalToggle;
+      }
+    }
+    stop();
+
+    const heapSnapshotEvents = events.filter(
+      (event) => event.type === "diagnostic.memory.heap-snapshot",
+    );
+    expect(heapSnapshotEvents).toHaveLength(1);
+    const [snapshot] = heapSnapshotEvents;
+    expect(snapshot).toMatchObject({
+      type: "diagnostic.memory.heap-snapshot",
+      status: "skipped",
+      reason: "disabled",
+    });
+    if (snapshot.type === "diagnostic.memory.heap-snapshot") {
+      expect(snapshot.filePath).toBeUndefined();
+    }
+  });
+
+  it("does not emit heap-snapshot events for warning-level pressure", () => {
+    const events: DiagnosticEventPayload[] = [];
+    const stop = onDiagnosticEvent((event) => events.push(event));
+    const originalToggle = process.env.OPENCLAW_MEMORY_HEAP_SNAPSHOT;
+    process.env.OPENCLAW_MEMORY_HEAP_SNAPSHOT = "1";
+    try {
+      emitDiagnosticMemorySample({
+        now: 1000,
+        memoryUsage: memoryUsage({ rss: 2000 }),
+        thresholds: {
+          rssWarningBytes: 1000,
+          rssCriticalBytes: 100_000,
+          pressureRepeatMs: 60_000,
+        },
+      });
+    } finally {
+      if (originalToggle === undefined) {
+        delete process.env.OPENCLAW_MEMORY_HEAP_SNAPSHOT;
+      } else {
+        process.env.OPENCLAW_MEMORY_HEAP_SNAPSHOT = originalToggle;
+      }
+    }
+    stop();
+
+    expect(events.some((event) => event.type === "diagnostic.memory.heap-snapshot")).toBe(false);
+  });
 });
