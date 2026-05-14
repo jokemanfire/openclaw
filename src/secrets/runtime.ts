@@ -91,6 +91,47 @@ function cloneSnapshot(snapshot: PreparedSecretsRuntimeSnapshot): PreparedSecret
   };
 }
 
+// Deep-freeze plain objects and arrays. The secrets runtime snapshot is
+// JSON-shaped (already validated for #2's JSON clone), so this is enough to
+// turn the published snapshot into a read-only view; per-read defensive
+// cloning then becomes a no-op and `getActiveSecretsRuntimeSnapshot` can
+// return the shared frozen ref. No-op on primitives and already-frozen
+// values, so repeat activations are cheap.
+function deepFreezeSnapshotValue<T>(value: T): T {
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+  if (Object.isFrozen(value)) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      deepFreezeSnapshotValue(item);
+    }
+  } else {
+    for (const key of Object.keys(value as Record<string, unknown>)) {
+      deepFreezeSnapshotValue((value as Record<string, unknown>)[key]);
+    }
+  }
+  return Object.freeze(value);
+}
+
+function freezeSnapshot(snapshot: PreparedSecretsRuntimeSnapshot): PreparedSecretsRuntimeSnapshot {
+  deepFreezeSnapshotValue(snapshot.sourceConfig);
+  deepFreezeSnapshotValue(snapshot.config);
+  for (const entry of snapshot.authStores) {
+    deepFreezeSnapshotValue(entry.store);
+    Object.freeze(entry);
+  }
+  Object.freeze(snapshot.authStores);
+  for (const warning of snapshot.warnings) {
+    Object.freeze(warning);
+  }
+  Object.freeze(snapshot.warnings);
+  deepFreezeSnapshotValue(snapshot.webTools);
+  return Object.freeze(snapshot);
+}
+
 function cloneRefreshContext(context: SecretsRuntimeRefreshContext): SecretsRuntimeRefreshContext {
   return {
     env: { ...context.env },
@@ -440,7 +481,14 @@ export async function prepareSecretsRuntimeSnapshot(params: {
 }
 
 export function activateSecretsRuntimeSnapshot(snapshot: PreparedSecretsRuntimeSnapshot): void {
-  const next = cloneSnapshot(snapshot);
+  // Clone once so the caller cannot mutate the activated state after the
+  // call, then deep-freeze the clone so `getActiveSecretsRuntimeSnapshot()`
+  // can return the shared frozen ref without an extra per-read clone. The
+  // freeze also locks down `runtimeConfigSnapshot` /
+  // `runtimeAuthProfileStoreSnapshots` (same refs after publish), which is
+  // a deliberate hardening of the snapshot read contract; existing readers
+  // are read-only (audited across `getRuntimeConfigSnapshot` callers).
+  const next = freezeSnapshot(cloneSnapshot(snapshot));
   const refreshContext =
     preparedSnapshotRefreshContext.get(snapshot) ??
     activeRefreshContext ??
@@ -454,6 +502,10 @@ export function activateSecretsRuntimeSnapshot(snapshot: PreparedSecretsRuntimeS
   replaceRuntimeAuthProfileStoreSnapshots(next.authStores);
   activeSnapshot = next;
   activeRefreshContext = cloneRefreshContext(refreshContext);
+  // Pin the refresh context on the published snapshot ref so callers that
+  // chain `getActiveSecretsRuntimeSnapshot()` straight into another
+  // `activateSecretsRuntimeSnapshot(...)` keep the same context lineage.
+  preparedSnapshotRefreshContext.set(next, cloneRefreshContext(refreshContext));
   setActiveRuntimeWebToolsMetadata(next.webTools);
   setRuntimeConfigSnapshotRefreshHandler({
     refresh: async ({ sourceConfig }) => {
@@ -474,14 +526,10 @@ export function activateSecretsRuntimeSnapshot(snapshot: PreparedSecretsRuntimeS
 }
 
 export function getActiveSecretsRuntimeSnapshot(): PreparedSecretsRuntimeSnapshot | null {
-  if (!activeSnapshot) {
-    return null;
-  }
-  const snapshot = cloneSnapshot(activeSnapshot);
-  if (activeRefreshContext) {
-    preparedSnapshotRefreshContext.set(snapshot, cloneRefreshContext(activeRefreshContext));
-  }
-  return snapshot;
+  // Hot path: return the frozen activeSnapshot directly. The snapshot is
+  // deep-frozen at activate time, so callers cannot mutate the shared state
+  // and we save one full `cloneSnapshot()` per read.
+  return activeSnapshot;
 }
 
 export function getActiveRuntimeWebToolsMetadata(): RuntimeWebToolsMetadata | null {
