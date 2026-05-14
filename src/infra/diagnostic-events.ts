@@ -528,6 +528,20 @@ export type DiagnosticMemoryPressureEvent = DiagnosticBaseEvent & {
   windowMs?: number;
 };
 
+export type DiagnosticMemoryHeapSnapshotEvent = DiagnosticBaseEvent & {
+  type: "diagnostic.memory.heap-snapshot";
+  status: "written" | "skipped" | "error";
+  reason: "critical_pressure" | "cooldown" | "disabled" | "write_failed";
+  memory?: DiagnosticMemoryUsage;
+  /** Resolved filesystem path of the snapshot (only set when `status="written"`). */
+  filePath?: string;
+  /** Snapshot file size in bytes (only set when `status="written"`). */
+  bytes?: number;
+  /** Wall-clock milliseconds spent writing the snapshot (only set when `status="written"`). */
+  durationMs?: number;
+  errorMessage?: string;
+};
+
 export type DiagnosticPayloadLargeEvent = DiagnosticBaseEvent & {
   type: "payload.large";
   surface: string;
@@ -610,6 +624,7 @@ export type DiagnosticEventPayload =
   | DiagnosticContextAssembledEvent
   | DiagnosticMemorySampleEvent
   | DiagnosticMemoryPressureEvent
+  | DiagnosticMemoryHeapSnapshotEvent
   | DiagnosticPayloadLargeEvent
   | DiagnosticLogRecordEvent
   | DiagnosticTelemetryExporterEvent
