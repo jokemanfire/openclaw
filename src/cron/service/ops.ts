@@ -47,6 +47,17 @@ import {
 
 const STARTUP_INTERRUPTED_ERROR = "cron: job interrupted by gateway restart";
 
+// Prefer JSON clone over `structuredClone` for cron job snapshots. `CronJob`
+// (`src/cron/types.ts`) is a JSON-shaped record loaded from disk, and the
+// cron service holds long-lived job state in a process-wide cache that is
+// re-cloned on every update/run/finish path. Repeated `structuredClone` on
+// those payloads accumulates V8 native memory the same way #45438 documented
+// for the session-store cache; matches the secrets runtime fix in
+// `src/secrets/runtime.ts:cloneJsonValue`.
+function cloneJsonValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 type InterruptedStartupRun = {
   jobId: string;
   runAtMs: number;
@@ -371,7 +382,7 @@ export async function update(state: CronServiceState, id: string, patch: CronJob
     await ensureLoaded(state, { skipRecompute: true });
     const job = findJobOrThrow(state, id);
     const now = state.deps.nowMs();
-    const nextJob = structuredClone(job);
+    const nextJob = cloneJsonValue(job);
     applyJobPatch(nextJob, patch, { defaultAgentId: state.deps.defaultAgentId });
     if (nextJob.schedule.kind === "every") {
       const anchor = nextJob.schedule.anchorMs;
@@ -686,7 +697,7 @@ async function prepareManualRun(
       job,
       startedAt: preflight.now,
     });
-    const executionJob = structuredClone(job);
+    const executionJob = cloneJsonValue(job);
     return {
       ok: true,
       ran: true,
@@ -780,7 +791,7 @@ async function finishPreparedManualRun(
       : {
           enabled: job.enabled,
           updatedAtMs: job.updatedAtMs,
-          state: structuredClone(job.state),
+          state: cloneJsonValue(job.state),
         };
     const postRunRemoved = shouldDelete;
     // Isolated Telegram send can persist target writeback directly to disk.
