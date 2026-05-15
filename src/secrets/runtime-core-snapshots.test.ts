@@ -11,6 +11,7 @@ import { captureEnv, withEnvAsync } from "../test-utils/env.js";
 import {
   activateSecretsRuntimeSnapshot,
   clearSecretsRuntimeSnapshot,
+  getActiveSecretsRuntimeSnapshot,
   prepareSecretsRuntimeSnapshot,
 } from "./runtime.js";
 import {
@@ -289,5 +290,69 @@ describe("secrets runtime snapshot core lanes", () => {
     ] as Record<string, unknown> | undefined;
     expect(runtimeProfile?.type).toBe("api_key");
     expect(runtimeProfile?.key).toBe("sk-runtime");
+  });
+
+  it("getActiveSecretsRuntimeSnapshot returns the same frozen ref on repeated reads", async () => {
+    const prepared = await prepareOpenAiRuntimeSnapshot({ includeAuthStoreRefs: false });
+    activateSecretsRuntimeSnapshot(prepared);
+
+    const first = getActiveSecretsRuntimeSnapshot();
+    const second = getActiveSecretsRuntimeSnapshot();
+    expect(first).not.toBeNull();
+    // Both reads must return the exact same object reference.
+    expect(second).toBe(first);
+  });
+
+  it("getActiveSecretsRuntimeSnapshot returns a deeply frozen snapshot", async () => {
+    const prepared = await prepareOpenAiRuntimeSnapshot({ includeAuthStoreRefs: true });
+    activateSecretsRuntimeSnapshot(prepared);
+
+    const snapshot = getActiveSecretsRuntimeSnapshot();
+    expect(snapshot).not.toBeNull();
+
+    // Top-level snapshot object is frozen.
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    // Nested config sub-objects are frozen.
+    expect(Object.isFrozen(snapshot!.config)).toBe(true);
+    expect(Object.isFrozen(snapshot!.sourceConfig)).toBe(true);
+    // warnings array and each element are frozen.
+    expect(Object.isFrozen(snapshot!.warnings)).toBe(true);
+    for (const warning of snapshot!.warnings) {
+      expect(Object.isFrozen(warning)).toBe(true);
+    }
+    // authStores array, each entry wrapper, and each store object are frozen.
+    expect(Object.isFrozen(snapshot!.authStores)).toBe(true);
+    for (const entry of snapshot!.authStores) {
+      expect(Object.isFrozen(entry)).toBe(true);
+      expect(Object.isFrozen(entry.store)).toBe(true);
+    }
+    // webTools top-level object is frozen.
+    expect(Object.isFrozen(snapshot!.webTools)).toBe(true);
+  });
+
+  it("mutation of the returned snapshot throws in strict mode", async () => {
+    const prepared = await prepareOpenAiRuntimeSnapshot({ includeAuthStoreRefs: false });
+    activateSecretsRuntimeSnapshot(prepared);
+
+    const snapshot = getActiveSecretsRuntimeSnapshot()!;
+    expect(snapshot).not.toBeNull();
+
+    // Attempting to mutate the top-level snapshot must throw.
+    expect(() => {
+      (snapshot as unknown as Record<string, unknown>).config = {} as never;
+    }).toThrow(TypeError);
+
+    // Attempting to mutate a nested config property must throw.
+    expect(() => {
+      (snapshot.config as unknown as Record<string, unknown>).models = {} as never;
+    }).toThrow(TypeError);
+
+    // Attempting to mutate the authStores array must throw.
+    expect(() => {
+      (snapshot.authStores as unknown as unknown[]).push({ agentDir: "/bad", store: {} });
+    }).toThrow(TypeError);
+
+    // The shared active snapshot is unaffected by any attempted mutation.
+    expect(getActiveSecretsRuntimeSnapshot()).toBe(snapshot);
   });
 });
