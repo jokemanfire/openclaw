@@ -78,16 +78,26 @@ function loadRuntimePrepareHelpers() {
   return runtimePreparePromise;
 }
 
+// Prefer JSON clone over `structuredClone` for the runtime snapshot payloads.
+// `OpenClawConfig`, `AuthProfileStore`, and `RuntimeWebToolsMetadata` are all
+// JSON-shaped (no Date/Map/Set/RegExp), and the snapshot is held in a
+// long-lived global that is re-cloned on every activate/get/refresh. Repeated
+// `structuredClone` on those payloads is the same native-memory growth path
+// addressed for the session-store cache in #45438 / ae57eb635c.
+function cloneJsonValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 function cloneSnapshot(snapshot: PreparedSecretsRuntimeSnapshot): PreparedSecretsRuntimeSnapshot {
   return {
-    sourceConfig: structuredClone(snapshot.sourceConfig),
-    config: structuredClone(snapshot.config),
+    sourceConfig: cloneJsonValue(snapshot.sourceConfig),
+    config: cloneJsonValue(snapshot.config),
     authStores: snapshot.authStores.map((entry) => ({
       agentDir: entry.agentDir,
-      store: structuredClone(entry.store),
+      store: cloneJsonValue(entry.store),
     })),
     warnings: snapshot.warnings.map((warning) => ({ ...warning })),
-    webTools: structuredClone(snapshot.webTools),
+    webTools: cloneJsonValue(snapshot.webTools),
   };
 }
 
@@ -332,8 +342,12 @@ export async function prepareSecretsRuntimeSnapshot(params: {
   loadablePluginOrigins?: ReadonlyMap<string, PluginOrigin>;
 }): Promise<PreparedSecretsRuntimeSnapshot> {
   const runtimeEnv = mergeSecretsRuntimeEnv(params.env);
-  const sourceConfig = structuredClone(params.config);
-  const resolvedConfig = structuredClone(params.config);
+  // Serialize once and parse twice to derive the two independent JSON-cloned
+  // config views without paying the native-memory cost of two `structuredClone`
+  // passes on the same payload (refs #45438).
+  const serializedConfig = JSON.stringify(params.config);
+  const sourceConfig = JSON.parse(serializedConfig) as OpenClawConfig;
+  const resolvedConfig = JSON.parse(serializedConfig) as OpenClawConfig;
   const includeAuthStoreRefs = params.includeAuthStoreRefs ?? true;
   let authStores: Array<{ agentDir: string; store: AuthProfileStore }> = [];
   const fastPathLoadAuthStore = params.loadAuthStore ?? loadAuthProfileStoreWithoutExternalProfiles;
@@ -344,7 +358,7 @@ export async function prepareSecretsRuntimeSnapshot(params: {
     for (const agentDir of candidateDirs) {
       authStores.push({
         agentDir,
-        store: structuredClone(fastPathLoadAuthStore(agentDir)),
+        store: cloneJsonValue(fastPathLoadAuthStore(agentDir)),
       });
     }
   }
@@ -394,7 +408,7 @@ export async function prepareSecretsRuntimeSnapshot(params: {
     if (!params.loadAuthStore) {
       authStores = candidateDirs.map((agentDir) => ({
         agentDir,
-        store: structuredClone(loadAuthStore(agentDir)),
+        store: cloneJsonValue(loadAuthStore(agentDir)),
       }));
     }
     for (const entry of authStores) {
