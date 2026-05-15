@@ -19,9 +19,9 @@ import {
   type OpenClawConfig,
 } from "../config/config.js";
 import { coerceSecretRef } from "../config/types.secrets.js";
+import { cloneJsonValue } from "../infra/json-clone.js";
 import type { PluginOrigin } from "../plugins/plugin-origin.types.js";
 import { resolveUserPath } from "../utils.js";
-import { cloneJsonValue } from "../infra/json-clone.js";
 import { type SecretResolverWarning } from "./runtime-shared.js";
 import {
   clearActiveRuntimeWebToolsMetadata,
@@ -90,6 +90,41 @@ function cloneSnapshot(snapshot: PreparedSecretsRuntimeSnapshot): PreparedSecret
     warnings: snapshot.warnings.map((warning) => ({ ...warning })),
     webTools: cloneJsonValue(snapshot.webTools),
   };
+}
+
+function deepFreezeSnapshotValue<T>(value: T): T {
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+  if (Object.isFrozen(value)) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      deepFreezeSnapshotValue(item);
+    }
+  } else {
+    for (const key of Object.keys(value as Record<string, unknown>)) {
+      deepFreezeSnapshotValue((value as Record<string, unknown>)[key]);
+    }
+  }
+  return Object.freeze(value);
+}
+
+function freezeSnapshot(snapshot: PreparedSecretsRuntimeSnapshot): PreparedSecretsRuntimeSnapshot {
+  deepFreezeSnapshotValue(snapshot.sourceConfig);
+  deepFreezeSnapshotValue(snapshot.config);
+  for (const entry of snapshot.authStores) {
+    deepFreezeSnapshotValue(entry.store);
+    Object.freeze(entry);
+  }
+  Object.freeze(snapshot.authStores);
+  for (const warning of snapshot.warnings) {
+    Object.freeze(warning);
+  }
+  Object.freeze(snapshot.warnings);
+  deepFreezeSnapshotValue(snapshot.webTools);
+  return Object.freeze(snapshot);
 }
 
 function cloneRefreshContext(context: SecretsRuntimeRefreshContext): SecretsRuntimeRefreshContext {
@@ -445,7 +480,7 @@ export async function prepareSecretsRuntimeSnapshot(params: {
 }
 
 export function activateSecretsRuntimeSnapshot(snapshot: PreparedSecretsRuntimeSnapshot): void {
-  const next = cloneSnapshot(snapshot);
+  const next = freezeSnapshot(cloneSnapshot(snapshot));
   const refreshContext =
     preparedSnapshotRefreshContext.get(snapshot) ??
     activeRefreshContext ??
@@ -459,6 +494,7 @@ export function activateSecretsRuntimeSnapshot(snapshot: PreparedSecretsRuntimeS
   replaceRuntimeAuthProfileStoreSnapshots(next.authStores);
   activeSnapshot = next;
   activeRefreshContext = cloneRefreshContext(refreshContext);
+  preparedSnapshotRefreshContext.set(next, cloneRefreshContext(refreshContext));
   setActiveRuntimeWebToolsMetadata(next.webTools);
   setRuntimeConfigSnapshotRefreshHandler({
     refresh: async ({ sourceConfig }) => {
@@ -479,14 +515,7 @@ export function activateSecretsRuntimeSnapshot(snapshot: PreparedSecretsRuntimeS
 }
 
 export function getActiveSecretsRuntimeSnapshot(): PreparedSecretsRuntimeSnapshot | null {
-  if (!activeSnapshot) {
-    return null;
-  }
-  const snapshot = cloneSnapshot(activeSnapshot);
-  if (activeRefreshContext) {
-    preparedSnapshotRefreshContext.set(snapshot, cloneRefreshContext(activeRefreshContext));
-  }
-  return snapshot;
+  return activeSnapshot;
 }
 
 export function getActiveRuntimeWebToolsMetadata(): RuntimeWebToolsMetadata | null {
