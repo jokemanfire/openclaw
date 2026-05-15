@@ -10,8 +10,17 @@ const OPEN_DM_POLICY_ALLOW_FROM_RE =
 
 const MANAGED_CONFIG_UNSET_PATHS = [["plugins", "installs"]] as const;
 
+// Prefer JSON clone over `structuredClone` for write-prepare. `OpenClawConfig`
+// is pure JSON (loaded from `openclaw.json`), and `createMergePatch` is the
+// hot path for every `config set` / `config patch` write; repeated
+// `structuredClone` on those payloads is the same native-memory growth path
+// #45438 / ae57eb635c addressed for the session-store cache. Local helper
+// mirrors the secrets runtime / cron / merge-patch fixes.
 function cloneUnknown<T>(value: T): T {
-  return structuredClone(value);
+  if (value === undefined) {
+    return value;
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 export function createMergePatch(base: unknown, target: unknown): unknown {

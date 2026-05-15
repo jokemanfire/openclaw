@@ -10,6 +10,16 @@ import { validateConfigObjectWithPlugins } from "./validation.js";
 
 type ConfigMcpServers = ReturnType<typeof normalizeConfiguredMcpServers>;
 
+// JSON clone instead of `structuredClone` for the loaded MCP config view and
+// the per-call write working copies. `OpenClawConfig` is pure JSON (loaded
+// from `openclaw.json`); repeated `structuredClone` on those payloads is the
+// same native-memory growth path #45438 / ae57eb635c addressed for the
+// session-store cache, and matches the secrets runtime / cron / merge-patch
+// fixes in sibling PRs.
+function cloneJsonValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 type ConfigMcpReadResult =
   | {
       ok: true;
@@ -43,7 +53,7 @@ export async function listConfiguredMcpServers(): Promise<ConfigMcpReadResult> {
   return {
     ok: true,
     path: snapshot.path,
-    config: structuredClone(sourceConfig),
+    config: cloneJsonValue(sourceConfig),
     mcpServers: normalizeConfiguredMcpServers(sourceConfig.mcp?.servers),
     baseHash: snapshot.hash,
   };
@@ -66,7 +76,7 @@ export async function setConfiguredMcpServer(params: {
     return loaded;
   }
 
-  const next = structuredClone(loaded.config);
+  const next = cloneJsonValue(loaded.config);
   const servers = normalizeConfiguredMcpServers(next.mcp?.servers);
   servers[name] = canonicalizeConfiguredMcpServer(params.server);
   next.mcp = {
@@ -117,7 +127,7 @@ export async function unsetConfiguredMcpServer(params: {
     };
   }
 
-  const next = structuredClone(loaded.config);
+  const next = cloneJsonValue(loaded.config);
   const servers = normalizeConfiguredMcpServers(next.mcp?.servers);
   delete servers[name];
   if (Object.keys(servers).length > 0) {

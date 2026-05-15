@@ -46,6 +46,16 @@ export type GatewayCronState = {
   cronEnabled: boolean;
 };
 
+// JSON clone instead of `structuredClone` for the plugin-facing cron job
+// payload. `CronJobSchedule` / `CronJobPayload` are JSON-shaped values served
+// out to plugin hooks on a per-event basis; repeated `structuredClone` is the
+// same native-memory growth path #45438 documented. Local helper mirrors the
+// secrets runtime and cron service fixes so the roll-up to a shared
+// `infra/json-clone.ts` can collapse them later.
+function cloneJsonValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 /** Pick only the keys whose values are not `undefined` from an object. */
 function pickDefined<T extends Record<string, unknown>>(
   obj: T,
@@ -68,10 +78,10 @@ function toPluginCronJob(job: CronJob): PluginHookGatewayCronJob {
     name: job.name,
     description: job.description,
     enabled: job.enabled,
-    schedule: job.schedule ? structuredClone(job.schedule) : undefined,
+    schedule: job.schedule ? cloneJsonValue(job.schedule) : undefined,
     sessionTarget: job.sessionTarget,
     wakeMode: job.wakeMode,
-    payload: job.payload ? structuredClone(job.payload) : undefined,
+    payload: job.payload ? cloneJsonValue(job.payload) : undefined,
     state: {
       nextRunAtMs: job.state.nextRunAtMs,
       runningAtMs: job.state.runningAtMs,
