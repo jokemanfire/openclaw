@@ -17,6 +17,9 @@ const MANAGED_CONFIG_UNSET_PATHS = [["plugins", "installs"]] as const;
 // #45438 / ae57eb635c addressed for the session-store cache. Local helper
 // mirrors the secrets runtime / cron / merge-patch fixes.
 function cloneUnknown<T>(value: T): T {
+  if (value === undefined) {
+    return value;
+  }
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
