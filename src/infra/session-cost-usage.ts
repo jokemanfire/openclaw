@@ -97,6 +97,7 @@ type UsageCostRefreshState = {
 type UsageCostRefreshResult = "refreshed" | "busy";
 
 const usageCostRefreshes = new Map<string, UsageCostRefreshState>();
+const MAX_USAGE_COST_REFRESH_ENTRIES = 500;
 
 type UsageCostCachedUsageEntry = CostUsageTotals & { timestamp: number };
 
@@ -1341,6 +1342,20 @@ export function requestCostUsageCacheRefresh(params?: {
   };
   mergeUsageCostRefreshRequest(state, params);
   usageCostRefreshes.set(agentId, state);
+  while (usageCostRefreshes.size > MAX_USAGE_COST_REFRESH_ENTRIES) {
+    const oldestKey = usageCostRefreshes.keys().next().value;
+    if (typeof oldestKey !== "string" || oldestKey === agentId) {
+      break;
+    }
+    const evicted = usageCostRefreshes.get(oldestKey);
+    if (evicted?.running) {
+      break;
+    }
+    if (evicted?.timer) {
+      clearTimeout(evicted.timer);
+    }
+    usageCostRefreshes.delete(oldestKey);
+  }
   scheduleUsageCostRefresh(agentId, state);
 }
 

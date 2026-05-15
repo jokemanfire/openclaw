@@ -25,6 +25,7 @@ const wsInflightCompact = new Map<string, WsInflightEntry>();
 let wsLastCompactConnId: string | undefined;
 const wsInflightOptimized = new Map<string, number>();
 const wsInflightSince = new Map<string, number>();
+const WS_INFLIGHT_TRACKING_MAX_ENTRIES = 2000;
 const wsLog = createSubsystemLogger("gateway/ws");
 
 const WS_META_SKIP_KEYS = new Set(["connId", "id", "method", "ok", "event"]);
@@ -282,6 +283,9 @@ export function logWs(direction: "in" | "out", kind: string, meta?: Record<strin
   const inflightKey = connId && id ? `${connId}:${id}` : undefined;
   if (direction === "in" && kind === "req" && inflightKey) {
     wsInflightSince.set(inflightKey, now);
+    if (wsInflightSince.size > WS_INFLIGHT_TRACKING_MAX_ENTRIES) {
+      wsInflightSince.clear();
+    }
   }
   const durationMs =
     direction === "out" && kind === "res" && inflightKey
@@ -327,7 +331,7 @@ function logWsOptimized(direction: "in" | "out", kind: string, meta?: Record<str
 
   if (direction === "in" && kind === "req" && inflightKey) {
     wsInflightOptimized.set(inflightKey, Date.now());
-    if (wsInflightOptimized.size > 2000) {
+    if (wsInflightOptimized.size > WS_INFLIGHT_TRACKING_MAX_ENTRIES) {
       wsInflightOptimized.clear();
     }
     return;
@@ -391,6 +395,9 @@ function logWsCompact(direction: "in" | "out", kind: string, meta?: Record<strin
 
   if (kind === "req" && direction === "in" && inflightKey) {
     wsInflightCompact.set(inflightKey, { ts: now, method, meta });
+    if (wsInflightCompact.size > WS_INFLIGHT_TRACKING_MAX_ENTRIES) {
+      wsInflightCompact.clear();
+    }
     return;
   }
 
