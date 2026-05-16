@@ -1388,6 +1388,7 @@
     "gateway:watch:raw": "node scripts/watch-node.mjs gateway --force",
     "gen:host-env-policy:swift": "node scripts/generate-host-env-security-policy-swift.mjs --write",
     "ghsa:patch": "node scripts/ghsa-patch.mjs",
+    "install:minimal": ". scripts/zte/mobile-minimal.env && node scripts/zte/generate-minimal-workspace.mjs && pnpm install",
     "ios:beta": "bash scripts/ios-beta-release.sh",
     "ios:beta:archive": "bash scripts/ios-beta-archive.sh",
     "ios:beta:prepare": "bash scripts/ios-beta-prepare.sh",
@@ -1669,7 +1670,8 @@
     "ui:dev": "node scripts/ui.js dev",
     "ui:i18n:check": "node --import tsx scripts/control-ui-i18n.ts check",
     "ui:i18n:sync": "node --import tsx scripts/control-ui-i18n.ts sync --write",
-    "ui:install": "node scripts/ui.js install"
+    "ui:install": "node scripts/ui.js install",
+    "workspace:restore": "cp -f pnpm-workspace.yaml.full.bak pnpm-workspace.yaml 2>/dev/null || echo 'No backup found; run git checkout pnpm-workspace.yaml'"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "0.21.0",

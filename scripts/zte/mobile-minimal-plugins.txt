@@ -1,0 +1,65 @@
+# =============================================================================
+# Mobile minimal plugin list — one plugin directory name per line.
+# Lines starting with # are comments and are ignored.
+# Empty lines are ignored.
+# =============================================================================
+
+# ---- ZTE internal ----
+icenter
+model-config-zte-internal
+uac-internal
+zte-exec-env
+zte-rule-matching
+
+# ---- channels ----
+feishu
+
+# ---- model providers ----
+kimi-coding
+model-config-generic
+moonshot
+openai
+volcengine
+
+# ---- user features ----
+browser
+common-phrases
+device-pair
+diagnostics-memory-dashboard
+document-extract
+editor-ui
+file-transfer
+phone-control
+prompt-reorganization
+simple-task-handel
+talk-voice
+terseness-prompt
+web-readability
+webhooks
+
+# ---- security ----
+security-app-guardian
+security-command-audit
+skill-security-fence
+
+# ---- skills ----
+skill-editor
+skills-mall
+skill-workshop
+
+# ---- memory ----
+active-memory
+memory-core
+memory-lancedb
+memory-wiki
+
+# ---- core utilities ----
+acpx
+llm-task
+lobster
+lossless-claw
+media-understanding-core
+speech-core
+test-support
+thread-ownership
+tokenjuice

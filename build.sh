@@ -22,7 +22,7 @@ tar -cf openclaw.tar.gz openclaw/
 
 adb connect 10.230.224.39:15002
 adb push openclaw.tar.gz /data/openclaw/
-adb shell "cd /data/openclaw && OPENCLAW_EXCLUDE_BUNDLED_PLUGINS='${OPENCLAW_EXCLUDE_BUNDLED_PLUGINS}' ./build.sh; echo \$? > build_result.tmp"
+adb shell "cd /data/openclaw && OPENCLAW_BUNDLED_PLUGINS='${OPENCLAW_BUNDLED_PLUGINS}' ./build.sh; echo \$? > build_result.tmp"
 
 REMOTE_EXIT_CODE=$(adb shell "cat /data/openclaw/build_result.tmp" | tr -d '\r')
 if [ "$REMOTE_EXIT_CODE" != "0" ]; then

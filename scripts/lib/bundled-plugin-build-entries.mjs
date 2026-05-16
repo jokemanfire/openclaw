@@ -5,24 +5,22 @@ import {
   bundledDistPluginFile,
   bundledPluginFile,
 } from "./bundled-plugin-paths.mjs";
-import { shouldBuildBundledCluster } from "./optional-bundled-clusters.mjs";
+import {
+  getExcludedBundledPluginsFromEnv,
+  getIncludedBundledPluginsFromEnv,
+  shouldBuildBundledCluster,
+} from "./optional-bundled-clusters.mjs";
 
 const TOP_LEVEL_PUBLIC_SURFACE_EXTENSIONS = new Set([".ts", ".js", ".mts", ".cts", ".mjs", ".cjs"]);
 export const NON_PACKAGED_BUNDLED_PLUGIN_DIRS = new Set(["qa-channel", "qa-lab", "qa-matrix"]);
 const EXCLUDED_CORE_BUNDLED_PLUGIN_DIRS = new Set(["qqbot"]);
-const EXCLUDE_BUNDLED_PLUGINS_ENV = "OPENCLAW_EXCLUDE_BUNDLED_PLUGINS";
 const toPosixPath = (value) => value.replaceAll("\\", "/");
 
 export function getEnvExcludedBundledPlugins(env = process.env) {
-  const raw = env[EXCLUDE_BUNDLED_PLUGINS_ENV];
-  if (!raw || typeof raw !== "string") return new Set();
-  return new Set(
-    raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
+  return getExcludedBundledPluginsFromEnv(env) ?? new Set();
 }
+
+export { getIncludedBundledPluginsFromEnv };
 
 function readBundledPluginPackageJson(packageJsonPath) {
   if (!fs.existsSync(packageJsonPath)) {
