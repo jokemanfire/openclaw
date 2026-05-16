@@ -16,6 +16,12 @@ import { loadBundledPluginPublicArtifactModuleSync } from "./public-surface-load
 
 const PROVIDER_POLICY_ARTIFACT_CANDIDATES = ["provider-policy-api.js"] as const;
 
+const _providerPluginIdCache = new Map<string, string | null>();
+
+export function clearProviderPluginIdCache(): void {
+  _providerPluginIdCache.clear();
+}
+
 export type BundledProviderPolicySurface = {
   normalizeConfig?: (ctx: ProviderNormalizeConfigContext) => ModelProviderConfig | null | undefined;
   applyConfigDefaults?: (
@@ -71,12 +77,31 @@ function resolveBundledProviderPolicyPluginId(
   if (!normalizedProviderId) {
     return null;
   }
+  if (options.manifestRegistry) {
+    return resolveBundledProviderPolicyPluginIdImpl(normalizedProviderId, options.manifestRegistry);
+  }
+  let cached = _providerPluginIdCache.get(normalizedProviderId);
+  if (cached !== undefined) {
+    return cached;
+  }
   const bundledPluginsDir = resolveBundledPluginsDir();
   if (!bundledPluginsDir) {
-    return null;
+    cached = null;
+    _providerPluginIdCache.set(normalizedProviderId, cached);
+    return cached;
   }
+  cached = resolveBundledProviderPolicyPluginIdImpl(
+    normalizedProviderId,
+    loadPluginManifestRegistry(),
+  );
+  _providerPluginIdCache.set(normalizedProviderId, cached);
+  return cached;
+}
 
-  const registry = options.manifestRegistry ?? loadPluginManifestRegistry();
+function resolveBundledProviderPolicyPluginIdImpl(
+  normalizedProviderId: string,
+  registry: Pick<PluginManifestRegistry, "plugins">,
+): string | null {
   for (const plugin of registry.plugins.toSorted((left, right) =>
     left.id.localeCompare(right.id),
   )) {
@@ -90,7 +115,6 @@ function resolveBundledProviderPolicyPluginId(
       return plugin.id;
     }
   }
-
   return null;
 }
 

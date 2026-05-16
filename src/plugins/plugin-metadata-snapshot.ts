@@ -170,10 +170,39 @@ export function listPluginOriginsFromMetadataSnapshot(
   return new Map(snapshot.plugins.map((record) => [record.id, record.origin]));
 }
 
+type CachedMetadataSnapshot = {
+  fingerprint: string;
+  snapshot: PluginMetadataSnapshot;
+  at: number;
+};
+
+let _cachedMetadataSnapshot: CachedMetadataSnapshot | undefined;
+
+export function clearCachedPluginMetadataSnapshot(): void {
+  _cachedMetadataSnapshot = undefined;
+}
+
 export function loadPluginMetadataSnapshot(
   params: LoadPluginMetadataSnapshotParams,
 ): PluginMetadataSnapshot {
-  return measureDiagnosticsTimelineSpanSync(
+  // Short-lived in-memory dedup: reuse the snapshot within the same request
+  // window (30 s TTL) when the config fingerprint hasn't changed. This avoids
+  // repeated filesystem scans when multiple codepaths call into plugin
+  // metadata during a single dispatch.
+  const now = performance.now();
+  const fingerprint = resolvePluginMetadataControlPlaneFingerprint({
+    config: params.config ?? {},
+    env: params.env,
+    workspaceDir: params.workspaceDir,
+  });
+  if (
+    _cachedMetadataSnapshot &&
+    _cachedMetadataSnapshot.fingerprint === fingerprint &&
+    now - _cachedMetadataSnapshot.at < 30000
+  ) {
+    return _cachedMetadataSnapshot.snapshot;
+  }
+  const snapshot = measureDiagnosticsTimelineSpanSync(
     "plugins.metadata.scan",
     () => loadPluginMetadataSnapshotImpl(params),
     {
@@ -186,6 +215,8 @@ export function loadPluginMetadataSnapshot(
       },
     },
   );
+  _cachedMetadataSnapshot = { fingerprint, snapshot, at: now };
+  return snapshot;
 }
 
 function loadPluginMetadataSnapshotImpl(

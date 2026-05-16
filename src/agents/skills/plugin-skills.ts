@@ -15,12 +15,27 @@ import { CONFIG_DIR } from "../../utils.js";
 
 const log = createSubsystemLogger("skills");
 
+let _cachedPluginSkillDirs: { key: string; dirs: string[]; at: number } | undefined;
+
+export function clearCachedPluginSkillDirs(): void {
+  _cachedPluginSkillDirs = undefined;
+}
+
 export function resolvePluginSkillDirs(params: {
   workspaceDir: string | undefined;
   config?: OpenClawConfig;
   /** Override the plugin skills directory for testing. */
   pluginSkillsDir?: string;
 }): string[] {
+  const now = performance.now();
+  const key = `${params.workspaceDir ?? ""}|${params.pluginSkillsDir ?? ""}`;
+  if (
+    _cachedPluginSkillDirs &&
+    _cachedPluginSkillDirs.key === key &&
+    now - _cachedPluginSkillDirs.at < 30000
+  ) {
+    return _cachedPluginSkillDirs.dirs;
+  }
   const workspaceDir = (params.workspaceDir ?? "").trim();
   if (!workspaceDir) {
     return [];
@@ -103,6 +118,7 @@ export function resolvePluginSkillDirs(params: {
     pluginSkillsDir: params.pluginSkillsDir,
   });
 
+  _cachedPluginSkillDirs = { key, dirs: resolved, at: now };
   return resolved;
 }
 
