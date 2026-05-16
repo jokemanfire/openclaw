@@ -110,7 +110,18 @@ function buildInputOptions(options: InputOptionsArg): InputOptionsReturn {
       return true;
     }
     if (log.code === "UNRESOLVED_IMPORT") {
-      return normalizedLogHaystack(log).includes("extensions/");
+      const haystack = normalizedLogHaystack(log);
+      return (
+        haystack.includes("extensions/") ||
+        // Dependencies hoisted from bundled plugins to root node_modules/
+        // (e.g. @microsoft/teams.apps, jsonwebtoken, zca-js, @grpc/proto-loader)
+        // may have unresolvable transitive deps (axios, semver, long) in
+        // pnpm's isolated layout. These are resolved at runtime from each
+        // plugin's own node_modules/, so warnings from node_modules/ are
+        // harmless and suppressed here. Fatal unresolved imports outside
+        // node_modules/ are still caught by the post-build guard.
+        haystack.includes("node_modules/")
+      );
     }
     if (log.code !== "EVAL") {
       return false;

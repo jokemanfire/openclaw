@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { getEnvExcludedBundledPlugins } from "./bundled-plugin-build-entries.mjs";
 
 function toPosixPath(value) {
   return String(value ?? "").replaceAll("\\", "/");
@@ -42,8 +43,13 @@ function readPackageStaticAssetEntries(packageJson) {
 export function discoverStaticExtensionAssets(params = {}) {
   const rootDir = params.rootDir ?? process.cwd();
   const fsImpl = params.fs ?? fs;
+  const env = params.env ?? process.env;
+  const envExcludedPlugins = getEnvExcludedBundledPlugins(env);
   const assets = [];
   for (const { dirName, packageDir } of listExtensionPackageDirs(rootDir, fsImpl)) {
+    if (envExcludedPlugins.has(dirName)) {
+      continue;
+    }
     const packageJsonPath = path.join(packageDir, "package.json");
     if (!fsImpl.existsSync(packageJsonPath)) {
       continue;
