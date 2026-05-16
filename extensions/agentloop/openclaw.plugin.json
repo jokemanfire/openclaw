@@ -1,0 +1,141 @@
+{
+  "id": "agentloop",
+  "name": "agentloop",
+  "description": "AgentLoop harness - multi-mode agent loop engine with Supervisor, Complex, Gui, Custom, Simple modes and app-based customization.",
+  "activation": {
+    "onStartup": true,
+    "onAgentHarnesses": ["agentloop"]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "maxConcurrentTasks": {
+        "type": "number",
+        "minimum": 1,
+        "default": 3,
+        "description": "Maximum number of concurrent tasks per user session."
+      },
+      "maxConcurrentTools": {
+        "type": "number",
+        "minimum": 1,
+        "default": 5,
+        "description": "Maximum number of tools executed in parallel within a single loop turn."
+      },
+      "defaultLoopType": {
+        "type": "string",
+        "enum": ["supervisor", "simple", "complex", "gui"],
+        "default": "complex",
+        "description": "Default loop mode used when no binding or schedule route exists."
+      },
+      "toolTimeoutMs": {
+        "type": "number",
+        "minimum": 1000,
+        "default": 30000,
+        "description": "Per-tool-call timeout in milliseconds."
+      },
+      "steer": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable steer mode for mid-execution user intervention."
+          }
+        }
+      },
+      "loop": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "maxTurns": {
+            "type": "number",
+            "minimum": 1,
+            "default": 50,
+            "description": "Maximum number of loop iterations per turn."
+          }
+        }
+      },
+      "compact": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "waitTimeoutMs": {
+            "type": "number",
+            "minimum": 1000,
+            "default": 300000,
+            "description": "Maximum time to wait for loop-level compaction."
+          }
+        }
+      },
+      "manifest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "writeToDisk": {
+            "type": "boolean",
+            "default": true,
+            "description": "Write agentloop-manifest.json to the workspace so embedded runner can discover available agents."
+          }
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "maxConcurrentTasks": {
+      "label": "Max Concurrent Tasks",
+      "help": "Maximum number of concurrent tasks per user session."
+    },
+    "maxConcurrentTools": {
+      "label": "Max Concurrent Tools",
+      "help": "Maximum number of tools executed in parallel within a single loop turn."
+    },
+    "defaultLoopType": {
+      "label": "Default Loop Mode",
+      "help": "Loop mode used when no session binding or schedule route exists. Supervisor uses classifier routing, ReAct follows think-act-observe cycles."
+    },
+    "toolTimeoutMs": {
+      "label": "Tool Timeout",
+      "help": "Per-tool-call timeout in milliseconds.",
+      "advanced": true
+    },
+    "steer": {
+      "label": "Steer Mode",
+      "help": "Controls for mid-execution user intervention."
+    },
+    "steer.enabled": {
+      "label": "Enable Steer",
+      "help": "Allow users to inject additional messages during loop execution."
+    },
+    "loop": {
+      "label": "Loop Settings",
+      "help": "Controls for agent loop execution."
+    },
+    "loop.maxTurns": {
+      "label": "Max Turns",
+      "help": "Maximum number of loop iterations per turn.",
+      "advanced": true
+    },
+    "compact": {
+      "label": "Compaction",
+      "help": "Controls for session compaction.",
+      "advanced": true
+    },
+    "compact.waitTimeoutMs": {
+      "label": "Compaction Wait Timeout",
+      "help": "Maximum time to wait for loop-level compaction to complete.",
+      "advanced": true
+    },
+    "manifest": {
+      "label": "Manifest",
+      "help": "Controls for agent manifest file generation.",
+      "advanced": true
+    },
+    "manifest.writeToDisk": {
+      "label": "Write Manifest",
+      "help": "Write agentloop-manifest.json so embedded runner can discover available agents without loading the plugin.",
+      "advanced": true
+    }
+  }
+}
