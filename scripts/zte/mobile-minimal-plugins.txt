@@ -63,3 +63,4 @@ speech-core
 test-support
 thread-ownership
 tokenjuice
+agentloop
