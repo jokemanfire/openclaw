@@ -160,13 +160,9 @@ describe("provider public artifacts", () => {
     try {
       writePlugin("first", ["fixture-provider"], 1);
       writePlugin("second", [], 1);
-      const {
-        resolveBundledProviderPolicySurface: resolvePolicySurface,
-        clearProviderPluginIdCache,
-      } = await importFreshModule<typeof import("./provider-public-artifacts.js")>(
-        import.meta.url,
-        "./provider-public-artifacts.js?scope=provider-alias-refresh",
-      );
+      const { resolveBundledProviderPolicySurface: resolvePolicySurface } = await importFreshModule<
+        typeof import("./provider-public-artifacts.js")
+      >(import.meta.url, "./provider-public-artifacts.js?scope=provider-alias-refresh");
 
       expect(
         resolvePolicySurface("fixture-provider")
@@ -176,7 +172,6 @@ describe("provider public artifacts", () => {
 
       writePlugin("first", [], 2);
       writePlugin("second", ["fixture-provider"], 2);
-      clearProviderPluginIdCache();
 
       expect(
         resolvePolicySurface("fixture-provider")

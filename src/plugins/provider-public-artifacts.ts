@@ -1,7 +1,7 @@
 import { normalizeProviderId } from "../agents/provider-id.js";
 import type { ModelProviderConfig } from "../config/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { resolveBundledPluginsDir } from "./bundled-dir.js";
+import { getCurrentPluginMetadataSnapshot } from "./current-plugin-metadata-snapshot.js";
 import { loadPluginManifestRegistry, type PluginManifestRegistry } from "./manifest-registry.js";
 import type {
   ProviderApplyConfigDefaultsContext,
@@ -15,12 +15,6 @@ import type {
 import { loadBundledPluginPublicArtifactModuleSync } from "./public-surface-loader.js";
 
 const PROVIDER_POLICY_ARTIFACT_CANDIDATES = ["provider-policy-api.js"] as const;
-
-const _providerPluginIdCache = new Map<string, string | null>();
-
-export function clearProviderPluginIdCache(): void {
-  _providerPluginIdCache.clear();
-}
 
 export type BundledProviderPolicySurface = {
   normalizeConfig?: (ctx: ProviderNormalizeConfigContext) => ModelProviderConfig | null | undefined;
@@ -77,25 +71,17 @@ function resolveBundledProviderPolicyPluginId(
   if (!normalizedProviderId) {
     return null;
   }
-  if (options.manifestRegistry) {
-    return resolveBundledProviderPolicyPluginIdImpl(normalizedProviderId, options.manifestRegistry);
+  const registry = options.manifestRegistry ?? loadManifestRegistryForPolicySurface();
+  return resolveBundledProviderPolicyPluginIdImpl(normalizedProviderId, registry);
+}
+
+/** Prefer the gateway's current metadata snapshot to avoid redundant filesystem discovery. */
+function loadManifestRegistryForPolicySurface(): PluginManifestRegistry {
+  const snapshot = getCurrentPluginMetadataSnapshot({ allowWorkspaceScopedSnapshot: true });
+  if (snapshot?.manifestRegistry.plugins.length) {
+    return snapshot.manifestRegistry;
   }
-  let cached = _providerPluginIdCache.get(normalizedProviderId);
-  if (cached !== undefined) {
-    return cached;
-  }
-  const bundledPluginsDir = resolveBundledPluginsDir();
-  if (!bundledPluginsDir) {
-    cached = null;
-    _providerPluginIdCache.set(normalizedProviderId, cached);
-    return cached;
-  }
-  cached = resolveBundledProviderPolicyPluginIdImpl(
-    normalizedProviderId,
-    loadPluginManifestRegistry(),
-  );
-  _providerPluginIdCache.set(normalizedProviderId, cached);
-  return cached;
+  return loadPluginManifestRegistry();
 }
 
 function resolveBundledProviderPolicyPluginIdImpl(
@@ -126,10 +112,13 @@ export function resolveBundledProviderPolicySurface(
   if (!normalizedProviderId) {
     return null;
   }
-  return (
-    tryLoadBundledProviderPolicySurface(normalizedProviderId) ??
-    tryLoadBundledProviderPolicySurface(
-      resolveBundledProviderPolicyPluginId(normalizedProviderId, options) ?? normalizedProviderId,
-    )
-  );
+  const directSurface = tryLoadBundledProviderPolicySurface(normalizedProviderId);
+  if (directSurface) {
+    return directSurface;
+  }
+  const ownerPluginId = resolveBundledProviderPolicyPluginId(normalizedProviderId, options);
+  if (!ownerPluginId || ownerPluginId === normalizedProviderId) {
+    return null;
+  }
+  return tryLoadBundledProviderPolicySurface(ownerPluginId);
 }

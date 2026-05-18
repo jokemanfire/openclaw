@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -58,6 +59,15 @@ type DiagnosticsTimelineOptions = {
   config?: OpenClawConfig;
   env?: NodeJS.ProcessEnv;
 };
+
+export type ActiveDiagnosticsTimelineSpan = {
+  name: string;
+  spanId: string;
+  phase?: string;
+  parentSpanId?: string;
+};
+
+const activeDiagnosticsTimelineSpan = new AsyncLocalStorage<ActiveDiagnosticsTimelineSpan>();
 
 let warnedAboutTimelineWrite = false;
 const createdTimelineDirs = new Set<string>();
@@ -290,4 +300,8 @@ export function measureDiagnosticsTimelineSpanSync<T>(
 
 export async function flushDiagnosticsTimelineForTest(): Promise<void> {
   await Promise.resolve();
+}
+
+export function getActiveDiagnosticsTimelineSpan(): ActiveDiagnosticsTimelineSpan | undefined {
+  return activeDiagnosticsTimelineSpan.getStore();
 }
