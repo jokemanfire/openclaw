@@ -166,7 +166,7 @@ async function agentViaGatewayCommand(opts: AgentCliOpts, runtime: RuntimeEnv) {
   const transportMode = cfg.gateway?.transportMode as "tcp" | "unix" | "both" | undefined;
   let socketPath: string | undefined;
   if (transportMode === "unix" || transportMode === "both") {
-    // Priority: config > env/getprop > default
+    // Priority: config > env/getprop > default(UNIX PATH)
     const configPath = cfg.gateway?.unixSocketPath?.trim();
     if (configPath) {
       socketPath = configPath;
