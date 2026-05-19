@@ -50,7 +50,6 @@ skill-workshop
 # ---- memory ----
 active-memory
 memory-core
-memory-lancedb
 memory-wiki
 
 # ---- core utilities ----
