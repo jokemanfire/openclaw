@@ -1,9 +1,4 @@
-import type {
-  SDKMessage,
-  PromptInput,
-  LoopResult,
-  AppLoopConfig,
-} from "@zte/agentloop-sdk/sdk";
+import type { SDKMessage, PromptInput, LoopResult, AppLoopConfig } from "@zte/agentloop-sdk/sdk";
 import {
   embeddedAgentLog,
   emitAgentEvent,
@@ -156,6 +151,7 @@ export async function sendAgentLoopAttempt(
 
   const promptInput = buildPromptInput(params);
   const loopOptions = await buildLoopOptions(session, agentId, appManifest);
+  embeddedAgentLog.debug(`[agentloop] loop.loopOptions=${JSON.stringify(loopOptions)}`);
 
   const attemptStartedAt = Date.now();
   const hookCtx = {
@@ -281,8 +277,9 @@ export async function resolveAgentLoopOutcome(
   return result;
 }
 
-export async function cleanupAgentLoopAttempt(_params: AgentHarnessV2CleanupParams): Promise<void> {
-}
+export async function cleanupAgentLoopAttempt(
+  _params: AgentHarnessV2CleanupParams,
+): Promise<void> {}
 
 function extractAssistantText(msg: SDKMessage): string {
   if (msg.type !== "assistant") return "";
@@ -389,8 +386,17 @@ async function buildLoopOptions(
     permissionMode: "default" as const,
     sessionId: `sessionId:${params.sessionId ?? ""}:sessionKey:${params.sessionKey ?? ""}`,
     model: params.modelId,
-    ...(resolveProviderUrl(params) ? { url: resolveProviderUrl(params) } : {}),
-    ...(params.resolvedApiKey ? { authToken: params.resolvedApiKey } : {}),
+    ...(params.model?.api ? { api: String(params.model.api) } : {}),
+    ...(resolveProviderUrl(params)
+      ? { url: resolveProviderUrl(params) }
+      : (params.model as any)?.baseUrl
+        ? { url: (params.model as any).baseUrl }
+        : {}),
+    ...(params.resolvedApiKey
+      ? { authToken: params.resolvedApiKey }
+      : resolveModelProviderApiKey(params)
+        ? { authToken: resolveModelProviderApiKey(params) }
+        : {}),
     maxTurns: session.resolvedConfig.loop.maxTurns,
     cwd: params.workspaceDir,
     workspace: params.workspaceDir,
@@ -399,7 +405,6 @@ async function buildLoopOptions(
     timeout: params.timeoutMs,
     ...(params.signal ? { signal: params.signal } : {}),
   };
-
 }
 
 function buildAgentSystemPrompt(
@@ -433,7 +438,39 @@ function resolveProviderUrl(params: AgentHarnessAttemptParams): string | undefin
       | Record<string, { config?: Record<string, unknown> }>
       | undefined;
     return entries?.[params.provider]?.config?.baseUrl as string | undefined;
-  } catch {
+  } catch (error) {
+    embeddedAgentLog.debug(`[agentloop] resolveProviderUrl fallback error=${String(error)}`);
     return undefined;
   }
+}
+
+function resolveModelProviderApiKey(params: AgentHarnessAttemptParams): string | undefined {
+  // 优先级：resolvedApiKey > model.headers.Authorization > config.models.providers[provider].apiKey
+  if (params.resolvedApiKey) {
+    return params.resolvedApiKey;
+  }
+  // 从 model.headers.Authorization 提取 Bearer token
+  const authHeader =
+    (params.model as any)?.headers?.Authorization || (params.model as any)?.headers?.authorization;
+  if (typeof authHeader === "string") {
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (match) {
+      return match[1];
+    }
+  }
+  // 从 config.models.providers[provider].apiKey 读取
+  try {
+    const providers = (params.config as Record<string, unknown>)?.models?.providers as
+      | Record<string, { apiKey?: string }>
+      | undefined;
+    const key = providers?.[params.provider]?.apiKey;
+    if (key) {
+      return key;
+    }
+  } catch (error) {
+    embeddedAgentLog.debug(
+      `[agentloop] resolveModelProviderApiKey fallback error=${String(error)}`,
+    );
+  }
+  return undefined;
 }
