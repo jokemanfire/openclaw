@@ -13,6 +13,7 @@ import { normalizeAgentId } from "../routing/session-key.js";
 import { type RuntimeEnv, writeRuntimeJson } from "../runtime.js";
 import { normalizeOptionalString } from "../shared/string-coerce.js";
 import { normalizeMessageChannel } from "../utils/message-channel.js";
+import { readGatewayUnixListenFromSystem } from "../zte_modules/gateway/server/unix-config.js";
 import { agentCommand } from "./agent.js";
 import { buildExplicitSessionIdSessionKey, resolveSessionKeyForRequest } from "./agent/session.js";
 
@@ -161,6 +162,20 @@ async function agentViaGatewayCommand(opts: AgentCliOpts, runtime: RuntimeEnv) {
   const channel = normalizeMessageChannel(opts.channel);
   const idempotencyKey = normalizeOptionalString(opts.runId) || randomIdempotencyKey();
 
+  // Resolve Unix socket path for gateway connection when transportMode is "both" or "unix"
+  const transportMode = cfg.gateway?.transportMode as "tcp" | "unix" | "both" | undefined;
+  let socketPath: string | undefined;
+  if (transportMode === "unix" || transportMode === "both") {
+    // Priority: config > env/getprop > default
+    const configPath = cfg.gateway?.unixSocketPath?.trim();
+    if (configPath) {
+      socketPath = configPath;
+    } else {
+      const system = readGatewayUnixListenFromSystem();
+      socketPath = system.usPath;
+    }
+  }
+
   const response: GatewayAgentResponse = await withProgress(
     {
       label: "Waiting for agent reply…",
@@ -193,6 +208,7 @@ async function agentViaGatewayCommand(opts: AgentCliOpts, runtime: RuntimeEnv) {
         timeoutMs: gatewayTimeoutMs,
         clientName: GATEWAY_CLIENT_NAMES.CLI,
         mode: GATEWAY_CLIENT_MODES.CLI,
+        ...(socketPath ? { socketPath } : {}),
       }),
   );
 
