@@ -8,12 +8,14 @@
   },
   "type": "module",
   "dependencies": {
-    "@zte/agentloop-sdk": "file:zte-agentloop-sdk-6.26.20-b4.tgz",
     "jiti": "^2.6.1",
     "zod": "^4.4.1"
   },
   "devDependencies": {
     "@openclaw/plugin-sdk": "workspace:*"
+  },
+  "optionalDependencies": {
+    "@zte/agentloop-sdk": "file:zte-agentloop-sdk-6.26.20-b4.tgz"
   },
   "openclaw": {
     "extensions": [
