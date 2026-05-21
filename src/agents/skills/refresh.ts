@@ -126,11 +126,17 @@ export function ensureSkillsWatcher(params: { workspaceDir: string; config?: Ope
     return;
   }
 
-  const watchTargets = resolveWatchTargets(workspaceDir, params.config);
-  const pathsKey = watchTargets.join("|");
-  if (existing && existing.pathsKey === pathsKey && existing.debounceMs === debounceMs) {
+  // Watcher already running with matching debounce — skip expensive
+  // resolveWatchTargets. The existing watcher detects skill file changes
+  // via bumpSkillsSnapshotVersion; config path changes (extraDirs, plugins)
+  // require restart so pathsKey comparison is not needed here.
+  if (existing && existing.debounceMs === debounceMs) {
     return;
   }
+
+  const watchTargets = resolveWatchTargets(workspaceDir, params.config);
+  const pathsKey = watchTargets.join("|");
+
   if (existing) {
     watchers.delete(workspaceDir);
     if (existing.timer) {
