@@ -883,6 +883,38 @@ function stripTrailingOffloadedMediaMarkers(message: string, refs: OffloadedRef[
 // Returned paths are absolute media-store paths when no sandbox is active, or
 // sandbox-relative paths plus `workspaceDir` when sandboxing is active. Host-side
 // media-understanding uses MediaWorkspaceDir to resolve those relative paths.
+async function cleanupChatSendPreDispatchMedia(params: {
+  offloadedRefs: OffloadedRef[];
+  mediaPathOffloadPaths: string[];
+  mediaPathOffloadWorkspaceDir?: string;
+  logGateway: GatewayRequestContext["logGateway"];
+}) {
+  const cleanupTasks: Promise<unknown>[] = params.offloadedRefs.map((ref) =>
+    deleteMediaBuffer(ref.id, "inbound"),
+  );
+  if (params.mediaPathOffloadWorkspaceDir) {
+    const workspaceRoot = path.resolve(params.mediaPathOffloadWorkspaceDir);
+    for (const stagedPath of new Set(params.mediaPathOffloadPaths)) {
+      if (!stagedPath || path.isAbsolute(stagedPath)) {
+        continue;
+      }
+      const target = path.resolve(workspaceRoot, stagedPath);
+      if (target === workspaceRoot || !target.startsWith(`${workspaceRoot}${path.sep}`)) {
+        continue;
+      }
+      cleanupTasks.push(fs.promises.rm(target, { force: true }));
+    }
+  }
+  const results = await Promise.allSettled(cleanupTasks);
+  for (const result of results) {
+    if (result.status === "rejected") {
+      params.logGateway.warn(
+        `chat.send aborted attachment cleanup failed: ${formatForLog(result.reason)}`,
+      );
+    }
+  }
+}
+
 async function prestageMediaPathOffloads(params: {
   offloadedRefs: OffloadedRef[];
   includeImageRefs?: boolean;
@@ -1850,31 +1882,14 @@ export const chatHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    let active = context.chatAbortControllers.get(runId);
-    let retryCount = 0;
-    const maxRetries = 8;
-    const retryDelayMs = 500;
-    
-    while (!active && retryCount < maxRetries) {
-      context.logGateway.warn(
-        `chat.abort: runId=${runId} not found in chatAbortControllers, retry ${retryCount + 1}/${maxRetries} in ${retryDelayMs}ms`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-      active = context.chatAbortControllers.get(runId);
-      retryCount++;
-    }
-    
+    const active = context.chatAbortControllers.get(runId);
+    context.logGateway.warn(
+      `chat.abort: runId=${runId},  active.sessionId=${active?.sessionId}, active.sessionKey=${active?.sessionKey}`,
+    );
     if (!active) {
-      context.logGateway.warn(
-        `chat.abort: runId=${runId} still not found after ${maxRetries} retries, returning aborted=false`,
-      );
       respond(true, { ok: true, aborted: false, runIds: [] });
       return;
     }
-    
-    context.logGateway.info(
-      `chat.abort: runId=${runId} found in chatAbortControllers after ${retryCount} retries`,
-    );
     // Allow abort if sessionKey matches directly or resolves to the same canonical key.
     // This handles cases where the stored sessionKey might be a legacy/canonical variant.
     const { canonicalKey: callerCanonicalKey } = loadSessionEntry(rawSessionKey);
@@ -2126,6 +2141,30 @@ export const chatHandlers: GatewayRequestHandlers = {
     const explicitOriginTargetsPlugin = explicitOriginTargetsPluginBinding(
       explicitOriginResult.value,
     );
+    const ackPayload = {
+      runId: clientRunId,
+      status: "started" as const,
+    };
+    // Register before awaited attachment/model preprocessing so an immediate
+    // chat.abort can find and cancel the run (issue #84176).
+    const activeRunAbort = registerChatAbortController({
+      chatAbortControllers: context.chatAbortControllers,
+      runId: clientRunId,
+      sessionId: backingSessionId ?? clientRunId,
+      sessionKey: rawSessionKey,
+      timeoutMs,
+      now,
+      ownerConnId: normalizeOptionalText(client?.connId),
+      ownerDeviceId: normalizeOptionalText(client?.connect?.device?.id),
+      kind: "chat-send",
+    });
+    if (!activeRunAbort.registered) {
+      respond(true, { runId: clientRunId, status: "in_flight" as const }, undefined, {
+        cached: true,
+        runId: clientRunId,
+      });
+      return;
+    }
     if (normalizedAttachments.length > 0) {
       const modelRef = resolveSessionModelRef(cfg, entry, agentId);
       const supportsSessionModelImages = await resolveGatewayModelSupportsImages({
@@ -2173,6 +2212,12 @@ export const chatHandlers: GatewayRequestHandlers = {
           agentId,
         }));
       } catch (err) {
+        if (activeRunAbort.controller.signal.aborted) {
+          activeRunAbort.cleanup();
+          respond(true, ackPayload, undefined, { runId: clientRunId });
+          return;
+        }
+        activeRunAbort.cleanup();
         logAttachmentFailure(context.logGateway, "chat.send attachment parse/stage failed", err);
         respond(
           false,
@@ -2186,25 +2231,19 @@ export const chatHandlers: GatewayRequestHandlers = {
       }
     }
 
-    try {
-      const activeRunAbort = registerChatAbortController({
-        chatAbortControllers: context.chatAbortControllers,
-        runId: clientRunId,
-        sessionId: backingSessionId ?? clientRunId,
-        sessionKey: rawSessionKey,
-        timeoutMs,
-        now,
-        ownerConnId: normalizeOptionalText(client?.connId),
-        ownerDeviceId: normalizeOptionalText(client?.connect?.device?.id),
-        kind: "chat-send",
+    if (activeRunAbort.controller.signal.aborted) {
+      await cleanupChatSendPreDispatchMedia({
+        offloadedRefs,
+        mediaPathOffloadPaths,
+        mediaPathOffloadWorkspaceDir,
+        logGateway: context.logGateway,
       });
-      if (!activeRunAbort.registered) {
-        respond(true, { runId: clientRunId, status: "in_flight" as const }, undefined, {
-          cached: true,
-          runId: clientRunId,
-        });
-        return;
-      }
+      activeRunAbort.cleanup();
+      respond(true, ackPayload, undefined, { runId: clientRunId });
+      return;
+    }
+
+    try {
       if (activeChatSendDedupeKey) {
         context.dedupe.set(activeChatSendDedupeKey, {
           ts: now,
@@ -2216,10 +2255,6 @@ export const chatHandlers: GatewayRequestHandlers = {
         sessionKey,
         clientRunId,
       });
-      const ackPayload = {
-        runId: clientRunId,
-        status: "started" as const,
-      };
       respond(true, ackPayload, undefined, { runId: clientRunId });
       const persistedImagesPromise = persistChatSendImages({
         images: parsedImages,
@@ -2733,7 +2768,7 @@ export const chatHandlers: GatewayRequestHandlers = {
           context.removeChatRun(clientRunId, clientRunId, sessionKey);
         });
     } catch (err) {
-      context.chatAbortControllers.delete(clientRunId);
+      activeRunAbort.cleanup();
       context.removeChatRun(clientRunId, clientRunId, sessionKey);
       const error = errorShape(ErrorCodes.UNAVAILABLE, String(err));
       const payload = {
