@@ -1,7 +1,11 @@
 import type { SubscribeEmbeddedPiSessionParams } from "../../pi-embedded-subscribe.types.js";
+import { log } from "../logger.js";
 
 type IdleAwareAgent = {
   waitForIdle?: (() => Promise<void>) | undefined;
+  reset?: (() => void) | undefined;
+  beforeToolCall?: unknown;
+  afterToolCall?: unknown;
 };
 
 type ToolResultFlushManager = {
@@ -47,9 +51,45 @@ export async function cleanupEmbeddedAttemptResources(params: {
       /* best-effort */
     }
     try {
-      params.session?.dispose();
-    } catch {
-      /* best-effort */
+      if (params.session) {
+        params.session.dispose();
+
+        const sessionRecord = params.session as Record<string, unknown>;
+        if (sessionRecord.agent) {
+          const agent = sessionRecord.agent as IdleAwareAgent;
+          if (typeof agent.reset === "function") {
+            agent.reset();
+          }
+          agent.beforeToolCall = undefined;
+          agent.afterToolCall = undefined;
+        }
+
+        const heavyFields: readonly string[] = [
+          "_resourceLoader",
+          "_toolRegistry",
+          "_toolDefinitions",
+          "_toolPromptSnippets",
+          "_toolPromptGuidelines",
+          "_baseToolDefinitions",
+          "_extensionRunner",
+          "_baseSystemPrompt",
+          "_baseSystemPromptOptions",
+          "_customTools",
+          "_pendingNextTurnMessages",
+          "_pendingBashMessages",
+          "_scopedModels",
+        ];
+        for (const field of heavyFields) {
+          if (field in sessionRecord) {
+            sessionRecord[field] = null;
+          }
+        }
+      }
+    } catch (error) {
+      log.warn("cleanup: failed to deep dispose session", {
+        sessionId: params.sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
     try {
       params.releaseWsSession(params.sessionId, { allowPool: params.allowWsSessionPool === true });
