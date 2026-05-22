@@ -101,7 +101,7 @@ function mergeSessionState(target: SessionState, source: SessionState): void {
     target.state = source.state;
   }
   target.lastActivity = Math.max(target.lastActivity, source.lastActivity);
-  target.queueDepth += source.queueDepth;
+  target.queueDepth = Math.max(target.queueDepth, source.queueDepth);
   target.lastStuckWarnAgeMs =
     target.lastStuckWarnAgeMs === undefined || source.lastStuckWarnAgeMs === undefined
       ? undefined

@@ -127,7 +127,7 @@ describe("diagnostic session state pruning", () => {
     const merged = getDiagnosticSessionState({ sessionId: "s1", sessionKey });
 
     expect(merged).toBe(keyed);
-    expect(merged.queueDepth).toBe(2);
+    expect(merged.queueDepth).toBe(1);
     expect(merged.state).toBe("processing");
     expect(diagnosticSessionStates.has("s1")).toBe(false);
     expect(getDiagnosticSessionStateCountForTest()).toBe(1);
