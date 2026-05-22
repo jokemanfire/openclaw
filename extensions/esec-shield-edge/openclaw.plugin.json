@@ -1,0 +1,25 @@
+{
+  "id": "esec-shield-edge",
+  "name": "eSEC-Shield-Edge",
+  "description": "High Risk Command Guardian",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "highRiskInstructionDetection": {
+        "type": "boolean",
+        "default": true,
+        "description": "当检测到内容存在高危指令时，执行阻断/确认拦截动作"
+      }
+    }
+  },
+  "uiHints": {
+    "highRiskInstructionDetection": {
+      "label": "高危指令防御",
+      "help": "当检测到内容存在高危指令时，执行阻断/确认拦截动作"
+    }
+  }
+}

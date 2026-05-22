@@ -1,0 +1,35 @@
+{
+  "name": "@openclaw/esec-shield-edge",
+  "version": "2026.5.18",
+  "type": "module",
+  "main": "index.ts",
+  "dependencies": {},
+  "devDependencies": {
+    "@openclaw/plugin-sdk": "workspace:*"
+  },
+  "private": true,
+  "scripts": {
+    "build:daemon": "./daemon/build.sh --docker --version $npm_package_version",
+    "build:daemon:local": "./daemon/build.sh --version $npm_package_version",
+    "build:daemon:linux": "./daemon/build.sh --docker --os linux --version $npm_package_version",
+    "build:daemon:darwin": "./daemon/build.sh --docker --os darwin --version $npm_package_version",
+    "build:daemon:windows": "./daemon/build.sh --docker --os windows --version $npm_package_version",
+    "build:js": "npm i && npx tsc",
+    "prepack": "pnpm build:daemon"
+  },
+  "files": [
+    "bin/",
+    "index.ts",
+    "openclaw.plugin.json",
+    "src/",
+    "dist"
+  ],
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "runtimeExtensions": [
+      "./dist/index.js"
+    ]
+  }
+}

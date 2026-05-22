@@ -1,0 +1,10 @@
+{
+  "log": {
+    "output": "stderr",
+    "level": "info",
+    "maxSize": 30,
+    "maxBackups": 3,
+    "maxAge": 7,
+    "compress": true
+  }
+}

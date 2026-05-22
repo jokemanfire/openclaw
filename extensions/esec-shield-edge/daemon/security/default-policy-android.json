@@ -1,0 +1,1270 @@
+{
+  "commandWhiteDetection":{
+    "meta":"Android",
+    "description":"命令白名单规则,decision配置包含BLOCK,CONFIRM,ALLOW",
+    "policyRules": [
+      { "id": "tools_cli_block_reboot_phone", "decision": "BLOCK", "pattern": "^(?:(?:/(?:bin|system\\/bin)/(?:sh|bash)|sh|bash)\\s+-c\\s+)?['\"]?\\/system_ext\\/bin\\/tools-cli\\.sh\\s+.*\\breboot_phone\\b.*['\"]?\\s*$", "flags": "i", "reason": "tools-cli.sh breboot_phone为高危操作，需要用户手动执行", "risk": "CRITICAL", "policyLevel": 1 },
+      { "id": "tools_cli_block_download_or_install_app", "decision": "BLOCK", "pattern": "^(?:(?:/(?:bin|system\\/bin)/(?:sh|bash)|sh|bash)\\s+-c\\s+)?['\"]?\\/system_ext\\/bin\\/tools-cli\\.sh\\s+.*\\bdownload_or_install_app\\b.*['\"]?\\s*$", "flags": "i", "reason": "tools-cli.sh download_or_install_app为高危操作，需要用户手动执行", "risk": "CRITICAL", "policyLevel": 1 },
+      { "id": "tools_cli_block_uninstall_app", "decision": "BLOCK", "pattern": "^(?:(?:/(?:bin|system\\/bin)/(?:sh|bash)|sh|bash)\\s+-c\\s+)?['\"]?\\/system_ext\\/bin\\/tools-cli\\.sh\\s+.*\\buninstall_app\\b.*['\"]?\\s*$", "flags": "i", "reason": "tools-cli.sh uninstall_app为高危操作，需要用户手动执行", "risk": "CRITICAL", "policyLevel": 1 },
+      { "id": "tools_cli_block_shutdown_phone", "decision": "BLOCK", "pattern": "^(?:(?:/(?:bin|system\\/bin)/(?:sh|bash)|sh|bash)\\s+-c\\s+)?['\"]?\\/system_ext\\/bin\\/tools-cli\\.sh\\s+.*\\bshutdown_phone\\b.*['\"]?\\s*$", "flags": "i", "reason": "tools-cli.sh shutdown_phone为高危操作，需要用户手动执行", "risk": "CRITICAL", "policyLevel": 1 }
+    ]
+  },
+  "pathDetection":{
+    "meta":"Android",
+    "description":"路径检测规则,decision配置包含BLOCK,CONFIRM,ALLOW",
+    "policyRules": [
+    ]
+  },
+  "path": {
+    "allowReadDirs": [],
+    "allowWriteDirs": [],
+    "sensitiveReadPaths": [
+      "~/.ssh",
+      "/root/.ssh",
+      "/etc/ssh",
+      "/etc/ssl/private",
+      "/etc/pki/tls/private",
+      "/etc/pki/private",
+      "/etc/letsencrypt",
+      "~/.openclaw/openclaw.json",
+      "~/.openclaw/.env",
+      "~/.openclaw/secrets.json"
+    ],
+    "sensitiveReadFiles": [
+      "auth-profiles.json",
+      "auth.json"
+    ],
+    "sensitiveWritePaths": [
+      "/boot",
+      "/bin",
+      "/sbin",
+      "/lib",
+      "/lib64",
+      "/usr/bin",
+      "/usr/sbin",
+      "/usr/lib",
+      "/usr/lib64",
+      "/usr/local/bin",
+      "/usr/local/sbin",
+      "/usr/local/lib",
+      "/etc/hosts",
+      "/etc/resolv.conf",
+      "/etc/passwd",
+      "/etc/group",
+      "/etc/shadow",
+      "/etc/gshadow",
+      "/etc/sudoers",
+      "/etc/sudoers.d",
+      "/etc/systemd",
+      "/lib/systemd",
+      "/usr/lib/systemd",
+      "/etc/init.d",
+      "/etc/rc.d",
+      "/etc/rc.local",
+      "/etc/profile.d",
+      "/etc/ssh",
+      "/etc/ssl/private",
+      "/etc/pki/tls/private",
+      "/etc/pki/private",
+      "/etc/letsencrypt",
+      "/var/spool/cron",
+      "/etc/cron.d",
+      "/etc/cron.daily",
+      "/etc/cron.hourly",
+      "/etc/cron.monthly",
+      "/etc/cron.weekly",
+      "~/.ssh",
+      "/root/.ssh",
+      "~/.config/systemd/user",
+      "~/.local/share/systemd/user",
+      "~/.config/autostart",
+      "~/.openclaw/openclaw.json",
+      "~/.openclaw/.env",
+      "~/.openclaw/secrets.json",
+      "~/.openclaw/credentials",
+      "~/.openclaw/agents",
+      "~/.openclaw/extensions",
+      "~/.openclaw/tools"
+    ],
+    "denyPaths": [
+      "/proc",
+      "/proc/self/environ",
+      "/etc/passwd",
+      "/etc/shadow",
+      "/etc/gshadow",
+      "/etc/sudoers",
+      "~/.openclaw/credentials"
+    ],
+    "dangerousFiles": [
+      "openclaw.json",
+      "secrets.json",
+      "auth-profiles.json",
+      "auth.json",
+      ".gitconfig",
+      ".gitmodules",
+      ".bashrc",
+      ".bash_profile",
+      ".zshrc",
+      ".zprofile",
+      ".profile",
+      ".ripgreprc",
+      ".mcp.json"
+    ],
+    "dangerousDirectories": [
+      ".git",
+      ".vscode",
+      ".idea",
+      ".openclaw"
+    ]
+  },
+  "tools": {
+    "gateway": {
+      "allowActions": ["config.get", "config.schema"],
+      "mutateActions": ["config.apply", "config.patch"],
+      "askActions": ["restart", "update.run"],
+      "denyActions": [],
+      "sensitiveConfigKeys": [
+        "gateway.auth.mode",
+        "gateway.auth.token",
+        "gateway.auth.password",
+        "hooks.enabled",
+        "hooks.token",
+        "hooks.allowrequestsessionkey",
+        "hooks.allowedagentids",
+        "hooks.allowedsessionkeyprefixes",
+        "allowunsafeexternalcontent",
+        "agents.defaults.sandbox.mode",
+        "tools.profile",
+        "tools.allow",
+        "tools.deny",
+        "tools.exec.security",
+        "tools.exec.ask",
+        "tools.exec.safebins",
+        "plugins.enabled",
+        "plugins.allow",
+        "plugins.entries"
+      ]
+    },
+    "cron": {
+      "allowActions": ["status", "list", "runs"],
+      "mutateActions": ["add", "update"],
+      "askActions": ["remove", "run", "wake"],
+      "denyActions": [],
+      "autonomousPayloadKinds": ["agentturn"],
+      "autonomousSessionTargets": ["isolated"],
+      "externalWebhookModes": ["webhook"],
+      "internalUrlMarkers": ["localhost", "127.0.0.1", "::1", ".local", ".internal"]
+    },
+    "sessionsSpawn": {
+      "askRuntimes": ["acp"],
+      "askModes": ["session"],
+      "askWhenThreadRequested": true,
+      "askWhenCrossAgent": true,
+      "askWhenTargetWithoutCurrent": true
+    },
+    "sessionsSend": {
+      "allowSameSession": true,
+      "allowSameAgentWithoutSession": true,
+      "defaultAction": "ask"
+    },
+    "subagents": {
+      "allowActions": ["", "list"],
+      "askActions": ["kill", "steer"],
+      "denyActions": [],
+      "defaultAction": "ask"
+    },
+    "nodes": {
+      "allowActions": [
+        "status",
+        "describe",
+        "pending",
+        "camera_list",
+        "notifications_list",
+        "device_status",
+        "device_info",
+        "device_permissions",
+        "device_health"
+      ],
+      "askActions": [
+        "approve",
+        "reject",
+        "notify",
+        "camera_snap",
+        "camera_clip",
+        "photos_latest",
+        "screen_record",
+        "location_get",
+        "notifications_action"
+      ],
+      "denyActions": [],
+      "defaultAction": "ask"
+    },
+    "exec": {
+      "shell": {
+        "useBuiltinCommandRules": true,
+        "internalHosts": [],
+        "internalHostSuffixes": [],
+        "commandRules": [
+          {
+            "id": "builtin.system.chmod.any_args",
+            "matchType": "any_args",
+            "baseCommand": "chmod",
+            "action": "ask",
+            "severity": "high",
+            "reason": "chmod 会修改文件权限，可能影响系统安全"
+          },
+          {
+            "id": "builtin.system.chown",
+            "matchType": "any_args",
+            "baseCommand": "chown",
+            "action": "ask",
+            "severity": "high",
+            "reason": "chown 会修改文件权限，可能影响系统安全"
+          },
+          {
+            "id": "builtin.find.delete",
+            "matchType": "dangerous_flags",
+            "baseCommand": "find",
+            "forbiddenFlags": ["-delete"],
+            "action": "ask",
+            "severity": "critical",
+            "reason": "find -delete 会删除匹配的文件，可能导致数据丢失"
+          },
+          {
+            "id": "builtin.kernel.insmod",
+            "matchType": "any_args",
+            "baseCommand": "insmod",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "insmod 会加载内核模块，可能影响系统稳定性"
+          },
+          {
+            "id": "builtin.xargs.rm",
+            "matchType": "any_args",
+            "baseCommand": "xargs",
+            "requiredSubCommands": ["rm"],
+            "action": "ask",
+            "severity": "critical",
+            "reason": "any_arg rm涉及批量删除，需要人工审批"
+          },
+          {
+            "id": "builtin.openclaw.cli",
+            "matchType": "any_args",
+            "baseCommand": "openclaw",
+            "action": "ask",
+            "severity": "high",
+            "reason": "openclaw CLI 可能触发网关、会话或工具侧高影响操作，需要人工审批"
+          },
+          {
+            "id": "builtin.openclaw.runner.pnpm",
+            "matchType": "any_args",
+            "baseCommand": "pnpm",
+            "requiredSubCommands": ["openclaw"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "pnpm 间接调用 openclaw CLI 可能触发高影响操作，需要人工审批"
+          },
+          {
+            "id": "builtin.openclaw.runner.npm.exec",
+            "matchType": "any_args",
+            "baseCommand": "npm",
+            "requiredSubCommands": ["exec", "openclaw"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "npm exec 间接调用 openclaw CLI 可能触发高影响操作，需要人工审批"
+          },
+          {
+            "id": "builtin.openclaw.runner.npm.run",
+            "matchType": "any_args",
+            "baseCommand": "npm",
+            "requiredSubCommands": ["run", "openclaw"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "npm run 间接调用 openclaw CLI 可能触发高影响操作，需要人工审批"
+          },
+          {
+            "id": "builtin.openclaw.runner.npx",
+            "matchType": "any_args",
+            "baseCommand": "npx",
+            "requiredSubCommands": ["openclaw"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "npx 间接调用 openclaw CLI 可能触发高影响操作，需要人工审批"
+          },
+          {
+            "id": "builtin.openclaw.runner.bun.run",
+            "matchType": "any_args",
+            "baseCommand": "bun",
+            "requiredSubCommands": ["run", "openclaw"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "bun run 间接调用 openclaw CLI 可能触发高影响操作，需要人工审批"
+          },
+          {
+            "id": "builtin.openclaw.runner.bunx",
+            "matchType": "any_args",
+            "baseCommand": "bunx",
+            "requiredSubCommands": ["openclaw"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "bunx 间接调用 openclaw CLI 可能触发高影响操作，需要人工审批"
+          },
+          {
+            "id": "builtin.openclaw.runner.node",
+            "matchType": "any_args",
+            "baseCommand": "node",
+            "requiredArgBasenames": ["openclaw.mjs"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "node 直跑 openclaw 入口脚本可能触发高影响操作，需要人工审批"
+          },
+          {
+            "id": "builtin.openclaw.runner.bun.script",
+            "matchType": "any_args",
+            "baseCommand": "bun",
+            "requiredArgBasenames": ["openclaw.mjs"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "bun 直跑 openclaw 入口脚本可能触发高影响操作，需要人工审批"
+          },
+          {
+            "id": "builtin.privilege.sudo",
+            "matchType": "any_args",
+            "baseCommand": "sudo",
+            "action": "ask",
+            "severity": "high",
+            "reason": "sudo 可能提升命令权限并突破当前防护上下文"
+          },
+          {
+            "id": "builtin.privilege.doas",
+            "matchType": "any_args",
+            "baseCommand": "doas",
+            "action": "ask",
+            "severity": "high",
+            "reason": "doas 可能提升命令权限并突破当前防护上下文"
+          },
+          {
+            "id": "builtin.privilege.pkexec",
+            "matchType": "any_args",
+            "baseCommand": "pkexec",
+            "action": "ask",
+            "severity": "high",
+            "reason": "pkexec 可能提升命令权限并突破当前防护上下文"
+          },
+          {
+            "id": "builtin.privilege.su",
+            "matchType": "any_args",
+            "baseCommand": "su",
+            "action": "deny",
+            "severity": "high",
+            "reason": "su 为高危操作，需要用户手动执行"
+          },
+          {
+            "id": "builtin.system.shutdown",
+            "matchType": "any_args",
+            "baseCommand": "shutdown",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "shutdown 会关闭主机或打断当前会话，shutdown 为高危操作，需要用户手动执行"
+          },
+          {
+            "id": "builtin.system.reboot",
+            "matchType": "any_args",
+            "baseCommand": "reboot",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "reboot 会重启主机并打断当前会话，reboot为高危操作，需要用户手动执行"
+          },
+          {
+            "id": "builtin.system.reboot.p",
+            "matchType": "dangerous_flags",
+            "baseCommand": "reboot",
+            "forbiddenFlags": ["-p"],
+            "action": "deny",
+            "severity": "critical",
+            "reason": "reboot 会重启主机并打断当前会话，reboot为高危操作，需要用户手动执行"
+          },
+          {
+            "id": "builtin.system.halt",
+            "matchType": "any_args",
+            "baseCommand": "halt",
+            "action": "ask",
+            "severity": "critical",
+            "reason": "halt 会停止主机并打断当前会话"
+          },
+          {
+            "id": "builtin.system.poweroff",
+            "matchType": "any_args",
+            "baseCommand": "poweroff",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "poweroff 会关闭主机并打断当前会话，poweroff 为高危操作，需要用户手动执行"
+          },
+          {
+            "id": "builtin.system.systemctl.power",
+            "matchType": "any_args",
+            "baseCommand": "systemctl",
+            "requiredSubCommands": ["poweroff"],
+            "action": "deny",
+            "severity": "critical",
+            "reason": "poweroff为高危操作，需要用户手动执行"
+          },
+          {
+            "id": "builtin.system.systemctl.reboot",
+            "matchType": "any_args",
+            "baseCommand": "systemctl",
+            "requiredSubCommands": ["reboot"],
+            "action": "ask",
+            "severity": "critical",
+            "reason": "systemctl reboot 会重启主机"
+          },
+          {
+            "id": "builtin.system.systemctl.halt",
+            "matchType": "any_args",
+            "baseCommand": "systemctl",
+            "requiredSubCommands": ["halt"],
+            "action": "ask",
+            "severity": "critical",
+            "reason": "systemctl halt 会停止主机"
+          },
+          {
+            "id": "builtin.system.systemctl.enable",
+            "matchType": "any_args",
+            "baseCommand": "systemctl",
+            "requiredSubCommands": ["enable"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "systemctl enable 会创建持久化服务启用状态"
+          },
+          {
+            "id": "builtin.system.systemctl.disable",
+            "matchType": "any_args",
+            "baseCommand": "systemctl",
+            "requiredSubCommands": ["disable"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "systemctl disable 会修改主机服务启用状态"
+          },
+          {
+            "id": "builtin.system.systemctl.mask",
+            "matchType": "any_args",
+            "baseCommand": "systemctl",
+            "requiredSubCommands": ["mask"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "systemctl mask 会改变服务可用性并影响启动链"
+          },
+          {
+            "id": "builtin.system.systemctl.unmask",
+            "matchType": "any_args",
+            "baseCommand": "systemctl",
+            "requiredSubCommands": ["unmask"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "systemctl unmask 会恢复被屏蔽服务"
+          },
+          {
+            "id": "builtin.system.systemctl.daemon-reload",
+            "matchType": "any_args",
+            "baseCommand": "systemctl",
+            "requiredSubCommands": ["daemon-reload"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "systemctl daemon-reload 会重载服务单元配置"
+          },
+          {
+            "id": "builtin.system.systemctl.link",
+            "matchType": "any_args",
+            "baseCommand": "systemctl",
+            "requiredSubCommands": ["link"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "systemctl link 会把单元文件接入系统服务管理"
+          },
+          {
+            "id": "builtin.system.systemctl.edit",
+            "matchType": "any_args",
+            "baseCommand": "systemctl",
+            "requiredSubCommands": ["edit"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "systemctl edit 会修改服务覆盖配置"
+          },
+          {
+            "id": "builtin.system.systemctl.set-default",
+            "matchType": "any_args",
+            "baseCommand": "systemctl",
+            "requiredSubCommands": ["set-default"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "systemctl set-default 会修改系统默认启动目标"
+          },
+          {
+            "id": "builtin.persistence.crontab",
+            "matchType": "any_args",
+            "baseCommand": "crontab",
+            "action": "ask",
+            "severity": "high",
+            "reason": "crontab 会创建或修改定时任务持久化"
+          },
+          {
+            "id": "builtin.persistence.at",
+            "matchType": "any_args",
+            "baseCommand": "at",
+            "action": "ask",
+            "severity": "high",
+            "reason": "at 会注册延迟执行任务"
+          },
+          {
+            "id": "builtin.persistence.launchctl",
+            "matchType": "any_args",
+            "baseCommand": "launchctl",
+            "action": "ask",
+            "severity": "high",
+            "reason": "launchctl 会管理 macOS 持久化和服务状态"
+          },
+          {
+            "id": "builtin.persistence.schtasks",
+            "matchType": "dangerous_flags",
+            "baseCommand": "schtasks",
+            "forbiddenFlags": ["/create", "/change", "/delete", "/run", "/end"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "schtasks 会创建、修改或删除 Windows 计划任务"
+          },
+          {
+            "id": "builtin.persistence.reg.add",
+            "matchType": "any_args",
+            "baseCommand": "reg",
+            "requiredSubCommands": ["add"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "reg add 会修改 Windows 注册表"
+          },
+          {
+            "id": "builtin.persistence.reg.delete",
+            "matchType": "any_args",
+            "baseCommand": "reg",
+            "requiredSubCommands": ["delete"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "reg delete 会删除 Windows 注册表项"
+          },
+          {
+            "id": "builtin.windows.del",
+            "matchType": "dangerous_flags",
+            "baseCommand": "del",
+            "forbiddenFlags": ["/s", "/q", "/f"],
+            "action": "ask",
+            "severity": "critical",
+            "reason": "del 携带递归或强制参数时可能批量删除文件"
+          },
+          {
+            "id": "builtin.windows.rmdir",
+            "matchType": "dangerous_flags",
+            "baseCommand": "rmdir",
+            "forbiddenFlags": ["/s", "/q"],
+            "action": "ask",
+            "severity": "critical",
+            "reason": "rmdir 携带递归参数时可能删除整个目录树"
+          },
+          {
+            "id": "builtin.windows.rd",
+            "matchType": "dangerous_flags",
+            "baseCommand": "rd",
+            "forbiddenFlags": ["/s", "/q"],
+            "action": "ask",
+            "severity": "critical",
+            "reason": "rd 携带递归参数时可能删除整个目录树"
+          },
+          {
+            "id": "builtin.windows.taskkill",
+            "matchType": "any_args",
+            "baseCommand": "taskkill",
+            "action": "ask",
+            "severity": "medium",
+            "reason": "taskkill 会终止 Windows 进程并可能打断当前工作负载"
+          },
+          {
+            "id": "builtin.windows.tskill",
+            "matchType": "any_args",
+            "baseCommand": "tskill",
+            "action": "ask",
+            "severity": "medium",
+            "reason": "tskill 会终止 Windows 进程并可能打断当前工作负载"
+          },
+          {
+            "id": "builtin.windows.attrib",
+            "matchType": "dangerous_flags",
+            "baseCommand": "attrib",
+            "forbiddenFlags": ["+h", "+s", "+r", "+a", "-h", "-s", "-r"],
+            "action": "ask",
+            "severity": "medium",
+            "reason": "attrib 修改隐藏、系统或只读属性时需要人工审批"
+          },
+          {
+            "id": "builtin.windows.mstsc",
+            "matchType": "dangerous_flags",
+            "baseCommand": "mstsc",
+            "forbiddenFlags": ["/v", "/admin", "/edit"],
+            "action": "ask",
+            "severity": "medium",
+            "reason": "mstsc 会建立远程桌面连接或修改远程连接配置"
+          },
+          {
+            "id": "builtin.windows.logoff",
+            "matchType": "any_args",
+            "baseCommand": "logoff",
+            "action": "ask",
+            "severity": "critical",
+            "reason": "logoff 会注销当前 Windows 会话"
+          },
+          {
+            "id": "builtin.windows.format",
+            "matchType": "any_args",
+            "baseCommand": "format",
+            "action": "ask",
+            "severity": "critical",
+            "reason": "format 会格式化卷并销毁原有数据"
+          },
+          {
+            "id": "builtin.windows.diskpart",
+            "matchType": "dangerous_flags",
+            "baseCommand": "diskpart",
+            "forbiddenFlags": ["clean", "clean all", "write"],
+            "action": "ask",
+            "severity": "critical",
+            "reason": "diskpart 的清盘或写入操作会直接破坏磁盘状态"
+          },
+          {
+            "id": "builtin.windows.runas",
+            "matchType": "any_args",
+            "baseCommand": "runas",
+            "action": "ask",
+            "severity": "high",
+            "reason": "runas 会以其他身份执行命令并提升风险"
+          },
+          {
+            "id": "builtin.windows.sc",
+            "matchType": "dangerous_flags",
+            "baseCommand": "sc",
+            "forbiddenFlags": ["create", "delete", "start", "stop", "pause", "continue"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "sc 会创建、删除或操作 Windows 服务"
+          },
+          {
+            "id": "builtin.windows.net.service",
+            "matchType": "dangerous_flags",
+            "baseCommand": "net",
+            "forbiddenFlags": ["start", "stop", "pause", "continue"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "net start/stop 会修改 Windows 服务运行状态"
+          },
+          {
+            "id": "builtin.windows.net.user",
+            "matchType": "any_args",
+            "baseCommand": "net",
+            "requiredSubCommands": ["user"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "net user 会管理 Windows 用户账户"
+          },
+          {
+            "id": "builtin.windows.net.localgroup",
+            "matchType": "any_args",
+            "baseCommand": "net",
+            "requiredSubCommands": ["localgroup"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "net localgroup 会管理本地组成员"
+          },
+          {
+            "id": "builtin.windows.net.group",
+            "matchType": "any_args",
+            "baseCommand": "net",
+            "requiredSubCommands": ["group"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "net group 会管理 Windows 组"
+          },
+          {
+            "id": "builtin.windows.net.accounts",
+            "matchType": "any_args",
+            "baseCommand": "net",
+            "requiredSubCommands": ["accounts"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "net accounts 会修改账户策略"
+          },
+          {
+            "id": "builtin.windows.net.share",
+            "matchType": "any_args",
+            "baseCommand": "net",
+            "requiredSubCommands": ["share"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "net share 会修改共享暴露面"
+          },
+          {
+            "id": "builtin.windows.net.use",
+            "matchType": "any_args",
+            "baseCommand": "net",
+            "requiredSubCommands": ["use"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "net use 会建立或修改网络映射连接"
+          },
+          {
+            "id": "builtin.windows.setx",
+            "matchType": "any_args",
+            "baseCommand": "setx",
+            "action": "ask",
+            "severity": "high",
+            "reason": "setx 会持久化修改 Windows 环境变量"
+          },
+          {
+            "id": "builtin.windows.wmic",
+            "matchType": "any_args",
+            "baseCommand": "wmic",
+            "action": "ask",
+            "severity": "high",
+            "reason": "wmic 可调用 WMI 执行管理动作或远程查询"
+          },
+          {
+            "id": "builtin.windows.certutil",
+            "matchType": "dangerous_flags",
+            "baseCommand": "certutil",
+            "forbiddenFlags": ["-urlcache", "-decode", "-decodehex", "-encode"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "certutil 可用于下载、解码或改写可执行载荷"
+          },
+          {
+            "id": "builtin.windows.bcdedit",
+            "matchType": "any_args",
+            "baseCommand": "bcdedit",
+            "action": "ask",
+            "severity": "high",
+            "reason": "bcdedit 会修改 Windows 启动配置"
+          },
+          {
+            "id": "builtin.windows.msconfig",
+            "matchType": "any_args",
+            "baseCommand": "msconfig",
+            "action": "ask",
+            "severity": "high",
+            "reason": "msconfig 会修改系统启动和服务配置"
+          },
+          {
+            "id": "builtin.windows.netsh.firewall",
+            "matchType": "dangerous_flags",
+            "baseCommand": "netsh",
+            "forbiddenFlags": ["firewall", "advfirewall"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "netsh firewall/advfirewall 会修改 Windows 防火墙配置"
+          },
+          {
+            "id": "builtin.windows.remove-item",
+            "matchType": "dangerous_flags",
+            "baseCommand": "remove-item",
+            "forbiddenFlags": ["-recurse", "-force", "-rf", "-r"],
+            "action": "ask",
+            "severity": "critical",
+            "reason": "Remove-Item 携带递归或强制参数时可能删除大规模目录树"
+          },
+          {
+            "id": "builtin.windows.stop-process",
+            "matchType": "any_args",
+            "baseCommand": "stop-process",
+            "action": "ask",
+            "severity": "medium",
+            "reason": "Stop-Process 会终止 Windows 进程并可能打断当前工作负载"
+          },
+          {
+            "id": "builtin.windows.restart-computer",
+            "matchType": "any_args",
+            "baseCommand": "restart-computer",
+            "action": "ask",
+            "severity": "critical",
+            "reason": "Restart-Computer 会重启 Windows 主机并打断当前会话"
+          },
+          {
+            "id": "builtin.windows.stop-computer",
+            "matchType": "any_args",
+            "baseCommand": "stop-computer",
+            "action": "ask",
+            "severity": "critical",
+            "reason": "Stop-Computer 会关闭 Windows 主机并打断当前会话"
+          },
+          {
+            "id": "builtin.windows.get-wmiobject",
+            "matchType": "any_args",
+            "baseCommand": "get-wmiobject",
+            "action": "ask",
+            "severity": "high",
+            "reason": "Get-WmiObject 可访问高权限系统管理接口"
+          },
+          {
+            "id": "builtin.windows.invoke-wmimethod",
+            "matchType": "any_args",
+            "baseCommand": "invoke-wmimethod",
+            "action": "ask",
+            "severity": "high",
+            "reason": "Invoke-WmiMethod 可通过 WMI 触发系统管理动作"
+          },
+          {
+            "id": "builtin.windows.set-netfirewallrule",
+            "matchType": "any_args",
+            "baseCommand": "set-netfirewallrule",
+            "action": "ask",
+            "severity": "high",
+            "reason": "Set-NetFirewallRule 会修改 Windows 防火墙规则"
+          },
+          {
+            "id": "builtin.windows.set-netfirewallprofile",
+            "matchType": "any_args",
+            "baseCommand": "set-netfirewallprofile",
+            "action": "ask",
+            "severity": "high",
+            "reason": "Set-NetFirewallProfile 会修改 Windows 防火墙配置"
+          },
+          {
+            "id": "builtin.git.push.force",
+            "matchType": "dangerous_flags",
+            "baseCommand": "git",
+            "requiredSubCommands": ["push"],
+            "forbiddenFlags": ["--force", "-f", "--force-with-lease", "--force-if-includes"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "git push 携带强制参数可能改写远端历史"
+          },
+          {
+            "id": "builtin.git.push.delete",
+            "matchType": "dangerous_flags",
+            "baseCommand": "git",
+            "requiredSubCommands": ["push"],
+            "forbiddenFlags": ["--delete"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "git push --delete 会删除远端引用"
+          },
+          {
+            "id": "builtin.git.branch.delete",
+            "matchType": "dangerous_flags",
+            "baseCommand": "git",
+            "requiredSubCommands": ["branch"],
+            "forbiddenFlags": ["-d", "-D", "--delete"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "git branch 删除会移除本地分支"
+          },
+          {
+            "id": "builtin.git.reset",
+            "matchType": "any_args",
+            "baseCommand": "git",
+            "requiredSubCommands": ["reset"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "git reset 可能丢弃或改写本地历史"
+          },
+          {
+            "id": "builtin.git.checkout",
+            "matchType": "any_args",
+            "baseCommand": "git",
+            "requiredSubCommands": ["checkout"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "git checkout 可能覆盖工作区状态或使 HEAD 分离"
+          },
+          {
+            "id": "builtin.git.restore",
+            "matchType": "any_args",
+            "baseCommand": "git",
+            "requiredSubCommands": ["restore"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "git restore 可能丢弃工作区或索引中的改动"
+          },
+          {
+            "id": "builtin.git.clean",
+            "matchType": "dangerous_flags",
+            "baseCommand": "git",
+            "requiredSubCommands": ["clean"],
+            "forbiddenFlags": ["-f", "-d", "-x", "-X", "--force"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "git clean 会永久删除未跟踪文件"
+          },
+          {
+            "id": "builtin.git.revert",
+            "matchType": "any_args",
+            "baseCommand": "git",
+            "requiredSubCommands": ["revert"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "git revert 会改写项目历史，执行前需要复核"
+          },
+          {
+            "id": "builtin.rm.any",
+            "matchType": "any_args",
+            "baseCommand": "rm",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "rm会永久删除文件，rm操作为高危操作，需用户手动执行"
+          },
+          {
+            "id": "builtin.rm.recursive",
+            "matchType": "dangerous_flags",
+            "baseCommand": "rm",
+            "forbiddenFlags": ["-r", "-R", "--recursive"],
+            "action": "deny",
+            "severity": "critical",
+            "reason": "递归rm可能永久删除大规模目录树，rm操作为高危操作，需用户手动执行"
+          },
+          {
+            "id": "builtin.rm.force",
+            "matchType": "dangerous_flags",
+            "baseCommand": "rm",
+            "forbiddenFlags": ["-f", "-F", "--force"],
+            "action": "deny",
+            "severity": "critical",
+            "reason": "强制rm会跳过安全提示并忽略缺失目标，rm操作为高危操作，需用户手动执行"
+          },
+          {
+            "id": "builtin.dd.of",
+            "matchType": "dangerous_flags",
+            "baseCommand": "dd",
+            "forbiddenFlags": ["of"],
+            "action": "deny",
+            "severity": "critical",
+            "reason": "dd 指定输出目标后可能覆盖文件、设备或分区"
+          },
+          {
+            "id": "builtin.disk.mkfs",
+            "matchType": "any_args",
+            "baseCommand": "mkfs",
+            "action": "ask",
+            "severity": "critical",
+            "reason": "mkfs 会格式化文件系统并销毁原有数据"
+          },
+          {
+            "id": "builtin.disk.wipefs",
+            "matchType": "any_args",
+            "baseCommand": "wipefs",
+            "action": "ask",
+            "severity": "critical",
+            "reason": "wipefs 会清除块设备上的文件系统签名"
+          },
+          {
+            "id": "builtin.disk.fdisk",
+            "matchType": "any_args",
+            "baseCommand": "fdisk",
+            "action": "ask",
+            "severity": "critical",
+            "reason": "fdisk 会修改磁盘分区"
+          },
+          {
+            "id": "builtin.disk.parted",
+            "matchType": "any_args",
+            "baseCommand": "parted",
+            "action": "ask",
+            "severity": "critical",
+            "reason": "parted 会修改磁盘分区"
+          },
+          {
+            "id": "builtin.system.iptables",
+            "matchType": "any_args",
+            "baseCommand": "iptables",
+            "action": "ask",
+            "severity": "high",
+            "reason": "iptables 会修改主机防火墙状态"
+          },
+          {
+            "id": "builtin.system.nft",
+            "matchType": "any_args",
+            "baseCommand": "nft",
+            "action": "ask",
+            "severity": "high",
+            "reason": "nft 会修改主机防火墙状态"
+          },
+          {
+            "id": "builtin.system.ufw.disable",
+            "matchType": "any_args",
+            "baseCommand": "ufw",
+            "requiredSubCommands": ["disable"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "ufw disable 会关闭主机防火墙"
+          },
+          {
+            "id": "builtin.system.firewall-cmd",
+            "matchType": "any_args",
+            "baseCommand": "firewall-cmd",
+            "action": "ask",
+            "severity": "high",
+            "reason": "firewall-cmd 会修改主机防火墙配置"
+          },
+          {
+            "id": "builtin.process.kill",
+            "matchType": "any_args",
+            "baseCommand": "kill",
+            "action": "ask",
+            "severity": "medium",
+            "reason": "kill 会终止进程并可能打断当前工作负载"
+          },
+          {
+            "id": "builtin.process.pkill",
+            "matchType": "any_args",
+            "baseCommand": "pkill",
+            "action": "ask",
+            "severity": "medium",
+            "reason": "pkill 会按名称或模式终止进程"
+          },
+          {
+            "id": "builtin.process.killall",
+            "matchType": "any_args",
+            "baseCommand": "killall",
+            "action": "ask",
+            "severity": "medium",
+            "reason": "killall 会终止所有匹配进程"
+          },
+          {
+            "id": "builtin.docker.rm.force",
+            "matchType": "dangerous_flags",
+            "baseCommand": "docker",
+            "requiredSubCommands": ["rm"],
+            "forbiddenFlags": ["-f", "--force"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "docker rm --force 可能直接删除容器"
+          },
+          {
+            "id": "builtin.docker.rmi.force",
+            "matchType": "dangerous_flags",
+            "baseCommand": "docker",
+            "requiredSubCommands": ["rmi"],
+            "forbiddenFlags": ["-f", "--force"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "docker rmi --force 可能移除仍在使用的镜像"
+          },
+          {
+            "id": "builtin.docker.system.prune",
+            "matchType": "any_args",
+            "baseCommand": "docker",
+            "requiredSubCommands": ["system", "prune"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "docker system prune 会清理未使用的容器、镜像和缓存"
+          },
+          {
+            "id": "builtin.docker.container.prune",
+            "matchType": "any_args",
+            "baseCommand": "docker",
+            "requiredSubCommands": ["container", "prune"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "docker container prune 会删除已停止的容器"
+          },
+          {
+            "id": "builtin.docker.image.prune",
+            "matchType": "any_args",
+            "baseCommand": "docker",
+            "requiredSubCommands": ["image", "prune"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "docker image prune 会删除镜像并可能影响后续运行"
+          },
+          {
+            "id": "builtin.docker.volume.rm",
+            "matchType": "any_args",
+            "baseCommand": "docker",
+            "requiredSubCommands": ["volume", "rm"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "docker volume rm 会删除容器持久化数据"
+          },
+          {
+            "id": "builtin.docker.volume.prune",
+            "matchType": "any_args",
+            "baseCommand": "docker",
+            "requiredSubCommands": ["volume", "prune"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "docker volume prune 会删除未使用的持久化数据"
+          },
+          {
+            "id": "builtin.docker.compose.down",
+            "matchType": "dangerous_flags",
+            "baseCommand": "docker",
+            "requiredSubCommands": ["compose", "down"],
+            "forbiddenFlags": ["-v", "--volumes", "--remove-orphans"],
+            "action": "ask",
+            "severity": "high",
+            "reason": "docker compose down 携带卷或孤儿清理参数时可能破坏本地状态"
+          },
+          {
+            "id": "builtin.egress.curl.pipe",
+            "matchType": "dangerous_flags",
+            "baseCommand": "curl",
+            "forbiddenFlags": ["|"],
+            "action": "deny",
+            "severity": "critical",
+            "reason": "curl 管道到其他命令时可能直接执行远端代码"
+          },
+          {
+            "id": "builtin.egress.wget.pipe",
+            "matchType": "dangerous_flags",
+            "baseCommand": "wget",
+            "forbiddenFlags": ["|"],
+            "action": "deny",
+            "severity": "critical",
+            "reason": "wget 管道到其他命令时可能直接执行远端代码"
+          },
+          {
+            "id": "builtin.egress.curl.data",
+            "matchType": "dangerous_flags",
+            "baseCommand": "curl",
+            "forbiddenFlags": ["-d", "--data", "--data-raw", "--data-binary", "--data-urlencode"],
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "curl 向外部主机提交数据时可能外传本地信息"
+          },
+          {
+            "id": "builtin.egress.curl.form",
+            "matchType": "dangerous_flags",
+            "baseCommand": "curl",
+            "forbiddenFlags": ["-F", "--form", "--form-string"],
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "curl 向外部主机上传表单时可能外传本地文件"
+          },
+          {
+            "id": "builtin.egress.curl.upload",
+            "matchType": "dangerous_flags",
+            "baseCommand": "curl",
+            "forbiddenFlags": ["-T", "--upload-file"],
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "curl 上传模式可能把本地文件发送到外部主机"
+          },
+          {
+            "id": "builtin.egress.wget.post",
+            "matchType": "dangerous_flags",
+            "baseCommand": "wget",
+            "forbiddenFlags": ["--post-data", "--post-file", "--body-data", "--body-file"],
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "wget 的 post/body 参数可能把本地数据发送到外部主机"
+          },
+          {
+            "id": "builtin.egress.ssh",
+            "matchType": "any_args",
+            "baseCommand": "ssh",
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "ssh 会连接外部主机"
+          },
+          {
+            "id": "builtin.egress.scp",
+            "matchType": "any_args",
+            "baseCommand": "scp",
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "scp 会与外部主机传输文件"
+          },
+          {
+            "id": "builtin.egress.sftp",
+            "matchType": "any_args",
+            "baseCommand": "sftp",
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "sftp 会与外部主机传输文件"
+          },
+          {
+            "id": "builtin.egress.rsync",
+            "matchType": "any_args",
+            "baseCommand": "rsync",
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "rsync 可能把本地数据同步到外部主机"
+          },
+          {
+            "id": "builtin.egress.ftp",
+            "matchType": "any_args",
+            "baseCommand": "ftp",
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "ftp 可能把本地数据发送到外部主机"
+          },
+          {
+            "id": "builtin.egress.lftp",
+            "matchType": "any_args",
+            "baseCommand": "lftp",
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "lftp 可能把本地数据发送到外部主机"
+          },
+          {
+            "id": "builtin.egress.nc",
+            "matchType": "any_args",
+            "baseCommand": "nc",
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "netcat 可以创建任意外连到外部主机"
+          },
+          {
+            "id": "builtin.egress.netcat",
+            "matchType": "any_args",
+            "baseCommand": "netcat",
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "netcat 可以创建任意外连到外部主机"
+          },
+          {
+            "id": "builtin.egress.ncat",
+            "matchType": "any_args",
+            "baseCommand": "ncat",
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "ncat 可以创建任意外连到外部主机"
+          },
+          {
+            "id": "builtin.egress.socat",
+            "matchType": "any_args",
+            "baseCommand": "socat",
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "socat 可以把本地数据桥接到外部套接字或进程"
+          },
+          {
+            "id": "builtin.egress.dev-tcp",
+            "matchType": "network_target",
+            "baseCommand": "/dev/tcp",
+            "targetScope": "external",
+            "action": "deny",
+            "severity": "critical",
+            "reason": "/dev/tcp 可以直接向外部主机建立原始连接"
+          }
+        ]
+      }
+    }
+  }
+}
