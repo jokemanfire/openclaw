@@ -2,45 +2,51 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { LoopDefinition, LoopMode } from "@zte/agentloop-sdk/sdk";
 import { embeddedAgentLog } from "openclaw/plugin-sdk/agent-harness-runtime";
+import type { AgentHarnessAttemptParams } from "openclaw/plugin-sdk/agent-harness-runtime";
 
-export type AppManifest = {
-  appName: string;
-  loops: LoopMode[];
-  sourcePath: string;
+export type ExtendLoopMode = LoopMode & { workspaceDir: string | undefined };
+
+export type ExtendLoopDefinition = Omit<LoopDefinition, "loop_mode"> & {
+  loop_mode: ExtendLoopMode[];
 };
+
+export type AppManifest = ExtendLoopDefinition & { sourcePath: string };
 
 type AgentLoopManifest = {
   schemaVersion: 1;
   apps: Record<string, AppManifest>;
 };
 
-type AgentIdEntry = {
-  appName: string;
-  loopConfig: LoopMode;
-};
-
 export type LoopRegistry = {
   manifest: AgentLoopManifest;
   getApp(appName: string): AppManifest | undefined;
-  getLoop(appName: string, loopId: string): LoopMode | undefined;
-  resolveAgentId(agentId: string): AgentIdEntry | undefined;
+  getLoop(appName: string, loopId: string): ExtendLoopMode | undefined;
+  resolveAgentId(agentId: string): AppManifest | undefined;
   listApps(): string[];
-  listLoops(appName: string): LoopMode[];
+  listLoops(appName: string): ExtendLoopMode[];
   listAgentIds(): string[];
 };
 
-export async function loadAppManifests(pluginRootDir: string): Promise<LoopRegistry> {
+export async function loadAppManifests(
+  pluginRootDir: string,
+  params?: AgentHarnessAttemptParams,
+): Promise<LoopRegistry> {
   const rootDir = pluginRootDir;
   const appsDir = path.join(rootDir, "src", "apps");
   embeddedAgentLog.info(`[agentloop] loading manifests from ${appsDir}`);
-  const { manifest, agentIdMap } = await buildManifest(appsDir);
+  const { manifest, agentIdMap } = await buildManifest(appsDir, params);
+  function resolveApp(appName: string): AppManifest | undefined {
+    return (
+      manifest.apps[appName] ?? Object.values(manifest.apps).find((a) => a.app_name === appName)
+    );
+  }
   return {
     manifest,
     getApp(appName) {
-      return manifest.apps[appName];
+      return resolveApp(appName);
     },
     getLoop(appName, loopId) {
-      return manifest.apps[appName]?.loops.find((l) => l.id === loopId);
+      return resolveApp(appName)?.loop_mode.find((l) => l.id === loopId);
     },
     resolveAgentId(agentId) {
       return agentIdMap.get(agentId);
@@ -49,7 +55,7 @@ export async function loadAppManifests(pluginRootDir: string): Promise<LoopRegis
       return Object.keys(manifest.apps);
     },
     listLoops(appName) {
-      return manifest.apps[appName]?.loops ?? [];
+      return resolveApp(appName)?.loop_mode ?? [];
     },
     listAgentIds() {
       return [...agentIdMap.keys()];
@@ -59,9 +65,10 @@ export async function loadAppManifests(pluginRootDir: string): Promise<LoopRegis
 
 async function buildManifest(
   appsDir: string,
-): Promise<{ manifest: AgentLoopManifest; agentIdMap: Map<string, AgentIdEntry> }> {
+  params?: AgentHarnessAttemptParams,
+): Promise<{ manifest: AgentLoopManifest; agentIdMap: Map<string, AppManifest> }> {
   const apps: Record<string, AppManifest> = {};
-  const agentIdMap = new Map<string, AgentIdEntry>();
+  const agentIdMap = new Map<string, AppManifest>();
 
   let entries: fs.Dirent[];
   try {
@@ -82,7 +89,7 @@ async function buildManifest(
       const appDir = path.join(appsDir, entry.name);
       embeddedAgentLog.info(`[agentloop] appDir ${appDir}`);
       try {
-        const appManifest = await loadAppManifest(entry.name, appDir);
+        const appManifest = await loadAppManifest(appDir, params);
         return { appName: entry.name, appManifest };
       } catch (error) {
         embeddedAgentLog.warn(
@@ -96,8 +103,8 @@ async function buildManifest(
   for (const { appName, appManifest } of results) {
     if (!appManifest) continue;
     apps[appName] = appManifest;
-    for (const loop of appManifest.loops) {
-      agentIdMap.set(loop.id, { appName, loopConfig: loop });
+    for (const loop of appManifest.loop_mode) {
+      agentIdMap.set(loop.id, appManifest);
     }
   }
 
@@ -108,7 +115,10 @@ async function buildManifest(
   return { manifest: { schemaVersion: 1, apps }, agentIdMap };
 }
 
-async function loadAppManifest(appName: string, appDir: string): Promise<AppManifest | null> {
+async function loadAppManifest(
+  appDir: string,
+  params?: AgentHarnessAttemptParams,
+): Promise<AppManifest | null> {
   const configPath = path.join(appDir, "agent.app.json");
   let raw: string;
   try {
@@ -128,18 +138,26 @@ async function loadAppManifest(appName: string, appDir: string): Promise<AppMani
     return null;
   }
 
-  const displayName = parsed.app_name ?? appName;
-  const loops: LoopMode[] = (parsed.loop_mode ?? []).map((rawMode) => ({
-    id: rawMode.id ?? "default",
-    type: rawMode.type ?? "complex",
-    systemPrompt: rawMode.systemPrompt,
-    schedule_id: rawMode.schedule_id,
-    tool_search_id: rawMode.tool_search_id,
-    classifier_id: rawMode.classifier_id,
-    message_type: rawMode.message_type,
-  }));
+  const extendedLoopModes: ExtendLoopMode[] = (parsed.loop_mode ?? []).map((loop) =>
+    transferLoopMode(loop, params),
+  );
 
-  return { appName: displayName, loops, sourcePath: appDir };
+  return { ...parsed, loop_mode: extendedLoopModes ?? [], sourcePath: appDir };
+}
+
+function transferLoopMode(loop: LoopMode, params?: AgentHarnessAttemptParams): ExtendLoopMode {
+  const workspaceDir = params
+    ? getAgentWorkspace(loop.id, params.config as Record<string, unknown>)
+    : undefined;
+  return { ...loop, workspaceDir };
+}
+
+function getAgentWorkspace(agentId: string, config?: Record<string, unknown>): string | undefined {
+  const agents = (config as any)?.agents?.list as
+    | Array<{ id: string; workspace?: string }>
+    | undefined;
+  const agent = agents?.find((a) => a.id === agentId);
+  return agent?.workspace;
 }
 
 function isNotFound(error: unknown): boolean {

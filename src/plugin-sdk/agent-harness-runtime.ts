@@ -150,7 +150,7 @@ export {
   __testing as nativeHookRelayTesting,
   registerNativeHookRelay,
 } from "../agents/harness/native-hook-relay.js";
-
+export { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 /**
  * Derive the same compact user-facing tool detail that Pi uses for progress logs.
  */

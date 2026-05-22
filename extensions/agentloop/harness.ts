@@ -1,4 +1,5 @@
 import { embeddedAgentLog } from "openclaw/plugin-sdk/agent-harness-runtime";
+import { getGlobalHookRunner } from "openclaw/plugin-sdk/agent-harness-runtime";
 import type {
   AgentHarness,
   AgentHarnessAttemptParams,
@@ -9,8 +10,8 @@ import type {
   AgentHarnessCompactResult,
   AgentHarnessResetParams,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
-import { loadAppManifests, type LoopRegistry } from "./src/app-server/loop-registry.js";
 import { createAppLoader } from "./src/app-server/app-loader.js";
+import { loadAppManifests, type LoopRegistry } from "./src/app-server/loop-registry.js";
 import {
   prepareAgentLoopAttempt,
   startAgentLoopAttempt,
@@ -48,21 +49,24 @@ export function createAgentLoopHarness(options?: AgentLoopHarnessOptions): Agent
   let loopRegistryPromise: Promise<LoopRegistry> | undefined;
   let appsLoadPromise: Promise<void> | undefined;
 
-  function getLoopRegistry(): Promise<LoopRegistry> {
+  function getLoopRegistry(params?: AgentHarnessAttemptParams): Promise<LoopRegistry> {
+    if (params) {
+      return loadAppManifests(options?.pluginRootDir!, params);
+    }
     if (!loopRegistryPromise) {
       loopRegistryPromise = loadAppManifests(options?.pluginRootDir!);
     }
     return loopRegistryPromise;
   }
 
-  async function ensureAppsLoaded(): Promise<LoopRegistry> {
+  async function ensureAppsLoaded(params?: AgentHarnessAttemptParams): Promise<LoopRegistry> {
     if (appsLoadPromise) {
       await appsLoadPromise;
-      return getLoopRegistry();
+      return getLoopRegistry(params);
     }
 
     appsLoadPromise = (async () => {
-      const registry = await getLoopRegistry();
+      const registry = await getLoopRegistry(params);
       const appLoader = createAppLoader();
       const apps = registry.listApps();
       embeddedAgentLog.info(`[agentloop] registry.listApps() apps=${JSON.stringify(apps)}`);
@@ -70,14 +74,18 @@ export function createAgentLoopHarness(options?: AgentLoopHarnessOptions): Agent
         const manifest = registry.getApp(appName);
         if (!manifest) continue;
         await appLoader.loadApp(manifest.sourcePath, appName);
-        embeddedAgentLog.info(`[agentloop] app loaded appName=${appName} sourcePath=${manifest.sourcePath}`);
+        embeddedAgentLog.info(
+          `[agentloop] app loaded appName=${appName} sourcePath=${manifest.sourcePath}`,
+        );
       }
 
-      embeddedAgentLog.info(`[agentloop] all apps loaded apps=${JSON.stringify(registry.listApps())}`);
+      embeddedAgentLog.info(
+        `[agentloop] all apps loaded apps=${JSON.stringify(registry.listApps())}`,
+      );
     })();
 
     await appsLoadPromise;
-    return getLoopRegistry();
+    return getLoopRegistry(params);
   }
 
   return {
@@ -99,7 +107,31 @@ export function createAgentLoopHarness(options?: AgentLoopHarnessOptions): Agent
       let rawResult: AgentHarnessAttemptResult | undefined;
 
       try {
-        const loopRegistry = await ensureAppsLoaded();
+        const loopRegistry = await ensureAppsLoaded(params);
+
+        // P0: before_agent_reply — plugins can return synthetic reply, short-circuiting the agent
+        const hookRunner = getGlobalHookRunner();
+        if (hookRunner?.hasHooks("before_agent_reply")) {
+          const beforeReplyResult = await hookRunner.runBeforeAgentReply(
+            { cleanedBody: params.prompt },
+            {
+              agentId: params.agentId ?? "",
+              sessionKey: params.sessionKey,
+              sessionId: params.sessionId,
+              workspaceDir: params.workspaceDir,
+              runId: params.runId,
+              trigger: "user",
+            },
+          );
+          if (beforeReplyResult?.handled) {
+            return {
+              assistantTexts: [beforeReplyResult.reply ?? ""],
+              finishReason: "stop",
+              itemLifecycle: { started: 1, completed: 1, skipped: 0, aborted: 0 },
+            };
+          }
+        }
+
         prepared = await this.prepare(params);
         session = await this.start(prepared);
         rawResult = await this.send(session, { loopRegistry });
@@ -112,8 +144,7 @@ export function createAgentLoopHarness(options?: AgentLoopHarnessOptions): Agent
       } finally {
         try {
           await this.cleanup({ prepared, session, result: rawResult });
-        } catch {
-        }
+        } catch {}
       }
     },
 
@@ -141,7 +172,7 @@ export function createAgentLoopHarness(options?: AgentLoopHarnessOptions): Agent
 
     async prepare(params: AgentHarnessAttemptParams): Promise<AgentLoopPreparedRun> {
       return prepareAgentLoopAttempt(params, {
-        loopRegistry: await getLoopRegistry(),
+        loopRegistry: await getLoopRegistry(params),
         pluginConfig: options?.pluginConfig,
       });
     },
