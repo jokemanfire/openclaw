@@ -1,0 +1,120 @@
+{
+  "id": "context-projection-optimizer",
+  "kind": "context-engine",
+  "activation": {
+    "onStartup": true
+  },
+  "name": "Context Projection Optimizer",
+  "description": "Projects old oversized tool results into compact context while delegating durable compaction to OpenClaw.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "defaultProfile": {
+        "type": "string",
+        "enum": ["simple", "complex"],
+        "default": "complex"
+      },
+      "maxToolResultChars": {
+        "type": "number",
+        "minimum": 1000
+      },
+      "previewChars": {
+        "type": "number",
+        "minimum": 100
+      },
+      "tailChars": {
+        "type": "number",
+        "minimum": 0
+      },
+      "keepRecentMessages": {
+        "type": "number",
+        "minimum": 0
+      },
+      "profiles": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "simple": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "maxToolResultChars": {
+                "type": "number",
+                "minimum": 1000,
+                "default": 1000
+              },
+              "previewChars": {
+                "type": "number",
+                "minimum": 100,
+                "default": 100
+              },
+              "tailChars": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              },
+              "keepRecentMessages": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              }
+            }
+          },
+          "complex": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "maxToolResultChars": {
+                "type": "number",
+                "minimum": 1000,
+                "default": 12000
+              },
+              "previewChars": {
+                "type": "number",
+                "minimum": 100,
+                "default": 2000
+              },
+              "tailChars": {
+                "type": "number",
+                "minimum": 0,
+                "default": 800
+              },
+              "keepRecentMessages": {
+                "type": "number",
+                "minimum": 0,
+                "default": 12
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Context Projection Optimizer",
+      "help": "Select this plugin in plugins.slots.contextEngine to project old oversized tool output before prompts."
+    },
+    "defaultProfile": {
+      "label": "Default Profile",
+      "help": "Profile used when the caller does not pass a per-turn context-projection hint."
+    },
+    "maxToolResultChars": {
+      "label": "Max Tool Result Chars",
+      "help": "Shared fallback override for all profiles. Tool results above this size are eligible for projection when they are outside the recent-message window."
+    },
+    "previewChars": {
+      "label": "Preview Chars",
+      "help": "Characters kept from the start of each projected tool result."
+    },
+    "tailChars": {
+      "label": "Tail Chars",
+      "help": "Characters kept from the end of each projected tool result."
+    },
+    "keepRecentMessages": {
+      "label": "Keep Recent Messages",
+      "help": "Most recent messages that always stay verbatim."
+    }
+  }
+}

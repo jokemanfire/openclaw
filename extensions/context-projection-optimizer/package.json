@@ -1,0 +1,14 @@
+{
+  "name": "@openclaw/context-projection-optimizer",
+  "version": "0.1.0",
+  "description": "Plugin context engine that projects old oversized tool results into compact model context",
+  "type": "module",
+  "devDependencies": {
+    "@openclaw/plugin-sdk": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
