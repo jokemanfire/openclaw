@@ -41,6 +41,7 @@ webhooks
 security-app-guardian
 security-command-audit
 skill-security-fence
+esec-shield-edge
 
 # ---- skills ----
 skill-editor
