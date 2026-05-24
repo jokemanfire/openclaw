@@ -23,6 +23,11 @@ type MediaUnderstandingImageOpsOptions = {
 
 const SHARP_MODULE = "sharp";
 
+/** Sharp cache configuration constants */
+const SHARP_CACHE_MEMORY = 20; // MB
+const SHARP_CACHE_FILES = 0;
+const SHARP_CACHE_ITEMS = 10;
+
 let sharpFactoryPromise: Promise<SharpFactory> | null = null;
 
 function normalizeSharpFactory(mod: unknown): SharpFactory {
@@ -37,6 +42,7 @@ function normalizeSharpFactory(mod: unknown): SharpFactory {
   if (!sharp) {
     throw new Error("Optional dependency sharp did not expose an image processor");
   }
+  sharp.cache({ memory: SHARP_CACHE_MEMORY, files: SHARP_CACHE_FILES, items: SHARP_CACHE_ITEMS });
   return sharp;
 }
 
