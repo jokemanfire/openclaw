@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { SDKMessage, PromptInput, LoopResult, ToolBridgeHandle } from "@zte/agentloop-sdk/sdk";
+import type { LoopOptions } from "@zte/agentloop-sdk/sdk";
 import {
   embeddedAgentLog,
   emitAgentEvent,
@@ -15,12 +16,57 @@ import type {
   AgentHarnessAttemptParams,
   AgentHarnessAttemptResult,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
+import { resolveApiKeyForProvider } from "openclaw/plugin-sdk/provider-auth-runtime";
 import { resolveAgentLoopConfig, type AgentLoopLoopType } from "./config.js";
 import type { LoopRegistry } from "./loop-registry.js";
 import { createOcHookBridge, type OcHookBridge } from "./oc-hook-bridge.js";
 import { readAgentLoopBinding, writeAgentLoopBinding } from "./session-binding.js";
 import { composeSystemPrompt } from "./system-prompt.js";
-import { buildToolDefinitions, buildToolBridgeHandle } from "./tool-bridge.js";
+import { buildToolDefinitions, buildToolBridgeHandle, sanitizeToolArgs } from "./tool-bridge.js";
+
+// ── Internal message types (extractMessages output / buildMessageEvent input) ──
+
+type OcAssistantTextMessage = {
+  role: "assistant";
+  content: string;
+  timestamp: number;
+};
+
+type OcAssistantToolCallMessage = {
+  role: "assistant";
+  toolCallId: string;
+  content: Array<{ type: "toolCall"; name: string; arguments: unknown }>;
+  timestamp: number;
+};
+
+type OcToolResultMessage = {
+  role: "toolResult";
+  toolCallId: string;
+  toolName: string;
+  content: unknown;
+  isError?: boolean;
+  timestamp: number;
+};
+
+type OcMessage = OcAssistantTextMessage | OcAssistantToolCallMessage | OcToolResultMessage;
+
+// ── Agent event type ──
+
+type AgentEvent = {
+  stream: string;
+  data: Record<string, unknown>;
+  text?: string;
+  lastChunk?: string;
+  emittedSnapshot?: string;
+};
+
+// ── Config helper type for provider lookups ──
+
+type ConfigWithProviders = {
+  models?: {
+    providers?: Record<string, { baseUrl?: string; apiKey?: string }>;
+  };
+};
 
 export type AgentLoopPreparedRun = {
   harnessId: string;
@@ -257,6 +303,7 @@ export async function sendAgentLoopAttempt(
   }
 
   let messages: SDKMessage[] = [];
+  let totalOcMessages: OcMessage[] = [];
   let assistantTexts: string[] = [];
   let emittedSnapshot = "";
   let lastChunk = "";
@@ -291,13 +338,25 @@ export async function sendAgentLoopAttempt(
       messages.push(msg);
       embeddedAgentLog.debug(`[agentloop] raw msg =${JSON.stringify(msg)}`);
 
-      const event = buildMessageEvent(msg, { lastChunk, emittedSnapshot });
-      if (!event) continue;
+      const ccToolMap = extractToolMap(messages);
+      const ocMessages = extractMessages(msg, ccToolMap);
+      totalOcMessages.push(...ocMessages);
 
-      lastChunk = event.lastChunk;
-      emittedSnapshot = event.emittedSnapshot;
-      assistantTexts.push(event.text);
-      pushAgentEvent("assistant", event.data);
+      for (const ocMsg of ocMessages) {
+        const events = buildMessageEvent(ocMsg, { lastChunk, emittedSnapshot });
+        if (!events) continue;
+        for (const event of events) {
+          if (event.stream === "assistant") {
+            lastChunk = event.lastChunk ?? "";
+            emittedSnapshot = event.emittedSnapshot ?? "";
+            assistantTexts.push(event.text ?? "");
+          } else {
+            lastChunk = "";
+            emittedSnapshot = "";
+          }
+          pushAgentEvent(event.stream, event.data);
+        }
+      }
     }
   } catch (error) {
     success = false;
@@ -321,18 +380,13 @@ export async function sendAgentLoopAttempt(
   }
 
   if (params.sessionFile) {
-    const ccToolMap = extractToolMap(messages);
-    for (const ccMsg of messages) {
-      const ocMessages = extractMessages(ccMsg, ccToolMap);
-      for (const ocMsg of ocMessages) {
-        embeddedAgentLog.debug(`[harness.msg][oc]` + JSON.stringify(ocMsg, null, 2));
-        await appendSessionTranscriptMessage({
-          transcriptPath: params.sessionFile,
-          message: ocMsg,
-          sessionId: params.sessionId,
-          cwd: params.workspaceDir,
-        }).catch((err) => embeddedAgentLog.warn(`[agentloop] failed to append transcript: ${err}`));
-      }
+    for (const ocMsg of totalOcMessages) {
+      await appendSessionTranscriptMessage({
+        transcriptPath: params.sessionFile,
+        message: ocMsg,
+        sessionId: params.sessionId,
+        cwd: params.workspaceDir,
+      }).catch((err) => embeddedAgentLog.warn(`[agentloop] failed to append transcript: ${err}`));
     }
   }
 
@@ -415,7 +469,7 @@ function extractToolMap(messages: SDKMessage[]): Map<string, string> {
     if (msg.type !== "assistant") {
       continue;
     }
-    const messageObj = (msg as Record<string, unknown>).message;
+    const messageObj = msg.message;
     if (!messageObj || typeof messageObj !== "object") {
       continue;
     }
@@ -448,27 +502,90 @@ function extractToolMap(messages: SDKMessage[]): Map<string, string> {
   return toolMap;
 }
 
-function extractMessages(
-  msg: SDKMessage,
-  ccToolMap?: Map<string, string>,
-): Record<string, unknown>[] {
-  const messages: Record<string, unknown>[] = [];
+function extractMessages(msg: SDKMessage, ccToolMap?: Map<string, string>): OcMessage[] {
+  const messages: OcMessage[] = [];
   const assistantMsgs = extractAssistantMsgs(msg);
   messages.push(...assistantMsgs);
+  const extraParamMsgs = extractExtraParamMsgs(msg);
+  messages.push(...extraParamMsgs);
+  const toolCallResultMsgs = extractToolCallResultMsgs(msg);
+  messages.push(...toolCallResultMsgs);
   const userMsgs = extractUserMsgs(msg, ccToolMap);
   messages.push(...userMsgs);
   return messages;
 }
 
-function extractUserMsgs(
-  msg: SDKMessage,
-  ccToolMap?: Map<string, string>,
-): Record<string, unknown>[] {
-  const result: Record<string, unknown>[] = [];
+function extractExtraParamMsgs(msg: SDKMessage): OcMessage[] {
+  const result: OcMessage[] = [];
+  if (msg.type !== "extraparam_result") {
+    return result;
+  }
+  const resultText = msg.result;
+  if (typeof resultText !== "string") {
+    return result;
+  }
+  result.push({
+    role: "assistant",
+    content: resultText,
+    timestamp: Date.now(),
+  });
+  return result;
+}
+
+function extractToolCallResultMsgs(msg: SDKMessage): OcMessage[] {
+  const result: OcMessage[] = [];
+  if (msg.type !== "tool_call_result" || msg?.fromRuleLoop !== true) {
+    return result;
+  }
+  const error = msg.error;
+  if (typeof error === "string") {
+    result.push({
+      role: "assistant",
+      content: error,
+      timestamp: Date.now(),
+    });
+    return result;
+  }
+  const tools = msg.tools;
+  if (!Array.isArray(tools) || tools.length === 0) {
+    return result;
+  }
+  for (const tool of tools) {
+    if (!tool || typeof tool !== "object") continue;
+    const t = tool as Record<string, unknown>;
+    const contentItems = t.contentItems;
+    let contentText = "";
+    if (typeof contentItems === "string") {
+      contentText = contentItems;
+    } else if (Array.isArray(contentItems)) {
+      const texts: string[] = [];
+      for (const item of contentItems) {
+        if (item && typeof item === "object") {
+          const text = (item as Record<string, unknown>).text;
+          if (typeof text === "string") {
+            texts.push(text);
+          }
+        }
+      }
+      contentText = texts.join("\n");
+    } else {
+      contentText = JSON.stringify(contentItems);
+    }
+    result.push({
+      role: "assistant",
+      content: contentText,
+      timestamp: Date.now(),
+    });
+  }
+  return result;
+}
+
+function extractUserMsgs(msg: SDKMessage, ccToolMap?: Map<string, string>): OcMessage[] {
+  const result: OcMessage[] = [];
   if (msg.type !== "user") {
     return result;
   }
-  const messageObj = (msg as Record<string, unknown>).message;
+  const messageObj = msg.message;
   if (!messageObj || typeof messageObj !== "object") {
     return result;
   }
@@ -495,53 +612,32 @@ function extractUserMsgs(
     const rawContent = blockObject.content;
     if (typeof rawContent !== "string") continue;
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawContent);
-    } catch {
-      continue;
-    }
-    if (!parsed || typeof parsed !== "object") continue;
-
-    const innerContents = (parsed as Record<string, unknown>).content;
-    if (!Array.isArray(innerContents) || innerContents.length === 0) continue;
-    for (const innerContent of innerContents) {
-      const innerContentObject = innerContent as Record<string, unknown>;
-      if (!innerContentObject || typeof innerContentObject !== "object") {
-        continue;
-      }
-      if (
-        typeof innerContentObject.type !== "string" ||
-        !innerContentObject.type ||
-        typeof innerContentObject.text !== "string" ||
-        !innerContentObject.text
-      ) {
-        continue;
-      }
-
-      result.push({
-        role: "toolResult",
-        toolCallId: blockObject.tool_use_id,
-        toolName: ccToolMap?.get(blockObject.tool_use_id) ?? "notFound",
-        content: [
-          {
-            type: innerContentObject.type,
-            text: innerContentObject.text,
-          },
-        ],
-        timestamp: Date.now(),
-      });
-    }
+    result.push({
+      role: "toolResult",
+      toolCallId: blockObject.tool_use_id,
+      toolName: ccToolMap?.get(blockObject.tool_use_id) ?? "notFound",
+      content: sanitizeToolResult(rawContent) ?? "NotFound",
+      isError: blockObject.isError ?? false,
+      timestamp: Date.now(),
+    });
   }
   return result;
 }
 
-function extractAssistantMsgs(msg: SDKMessage): Record<string, unknown>[] {
-  const result: Record<string, unknown>[] = [];
+function sanitizeToolResult(rawContent: string): string {
+  try {
+    return JSON.stringify(sanitizeToolArgs(JSON.parse(rawContent)), null, 2);
+  } catch {
+    return rawContent;
+  }
+}
+
+function extractAssistantMsgs(msg: SDKMessage): OcMessage[] {
+  const result: OcMessage[] = [];
   if (msg.type !== "assistant") {
     return result;
   }
-  const messageObj = (msg as Record<string, unknown>).message;
+  const messageObj = msg.message;
   if (!messageObj || typeof messageObj !== "object") {
     return result;
   }
@@ -568,12 +664,12 @@ function extractAssistantMsgs(msg: SDKMessage): Record<string, unknown>[] {
     if (type === "tool_use" && typeof blockObject.id === "string") {
       result.push({
         role: "assistant",
-        toolCallId: blockObject.id ?? "",
+        toolCallId: blockObject.id,
         content: [
           {
             type: "toolCall",
             name: blockObject.name ?? "",
-            arguments: blockObject.input ?? {},
+            arguments: blockObject.input ? sanitizeToolArgs(blockObject.input) : {},
           },
         ],
         timestamp: Date.now(),
@@ -581,69 +677,6 @@ function extractAssistantMsgs(msg: SDKMessage): Record<string, unknown>[] {
     }
   }
   return result;
-}
-
-function extractAssistantText(msg: SDKMessage): string {
-  if (msg.type !== "assistant") return "";
-
-  if (typeof msg.content === "string" && msg.content) {
-    return msg.content;
-  }
-
-  const messageObj = (msg as Record<string, unknown>).message;
-  if (messageObj && typeof messageObj === "object") {
-    const contentBlocks = (messageObj as Record<string, unknown>).content;
-    if (Array.isArray(contentBlocks)) {
-      const texts: string[] = [];
-      for (const block of contentBlocks) {
-        if (
-          block &&
-          typeof block === "object" &&
-          (block as Record<string, unknown>).type === "text"
-        ) {
-          const text = (block as Record<string, unknown>).text;
-          if (typeof text === "string") {
-            texts.push(text);
-          }
-        }
-      }
-      if (texts.length > 0) {
-        return texts.join("");
-      }
-    }
-  }
-
-  const text = (msg as Record<string, unknown>).text;
-  if (typeof text === "string") {
-    return text;
-  }
-
-  return "";
-}
-
-function extractToolCallResultText(msg: Record<string, unknown>): string {
-  const tools = msg.tools;
-  if (!Array.isArray(tools)) {
-    return "";
-  }
-
-  const texts: string[] = [];
-  for (const tool of tools) {
-    if (!tool || typeof tool !== "object") continue;
-    const t = tool as Record<string, unknown>;
-    const contentItems = t.contentItems;
-    if (!Array.isArray(contentItems)) continue;
-
-    for (const item of contentItems) {
-      if (!item || typeof item !== "object") continue;
-      const i = item as Record<string, unknown>;
-      if (i.type === "text" && typeof i.text === "string" && i.text) {
-        texts.push(i.text);
-      }
-    }
-  }
-
-  return texts.length > 0 ? texts.join("\n\n") : "";
 }
 
 type MessageEventState = { lastChunk: string; emittedSnapshot: string };
@@ -656,13 +689,65 @@ type MessageEvent = {
 };
 
 interface MessageEventBuilder {
-  canHandle(msg: SDKMessage): boolean;
-  build(msg: SDKMessage, state: MessageEventState): MessageEvent | undefined;
+  canHandle(msg: OcMessage): boolean;
+  build(msg: OcMessage, state: MessageEventState): AgentEvent[] | undefined;
 }
 
-function buildAssistantEvent(msg: SDKMessage, state: MessageEventState): MessageEvent | undefined {
-  const rawText = extractAssistantText(msg);
-  const text = stripThinkTags(rawText);
+function buildAssistantAndToolCallEvents(msg: OcMessage, state: MessageEventState): AgentEvent[] {
+  const events: AgentEvent[] = [];
+  if (msg.role !== "assistant") {
+    return events;
+  }
+  if (typeof msg.content === "string") {
+    const assistantEvent = buildAssistantEvent(msg, state);
+    if (assistantEvent) {
+      events.push({
+        stream: "assistant",
+        data: assistantEvent.data,
+        text: assistantEvent.text,
+        lastChunk: assistantEvent.lastChunk,
+        emittedSnapshot: assistantEvent.emittedSnapshot,
+      });
+    }
+    return events;
+  }
+  const msgContent = msg.content[0];
+  if (!msgContent || msgContent.type !== "toolCall") {
+    return events;
+  }
+  embeddedAgentLog.debug(
+    `[tool-bridge] starting to call tool, callId: ${msg.toolCallId}, args: ${JSON.stringify(msgContent.arguments)}`,
+  );
+  events.push({
+    stream: "tool",
+    data: {
+      phase: "start",
+      name: msgContent.name,
+      toolCallId: msg.toolCallId,
+      args: msgContent.arguments,
+    },
+  });
+  events.push({
+    stream: "item",
+    data: {
+      itemId: `tool:${msg.toolCallId}`,
+      phase: "start",
+      kind: "tool",
+      title: msgContent.name,
+      status: "running",
+      name: msgContent.name,
+      toolCallId: msg.toolCallId,
+      startedAt: Date.now(),
+    },
+  });
+  return events;
+}
+
+function buildAssistantEvent(
+  msg: OcAssistantTextMessage,
+  state: MessageEventState,
+): MessageEvent | undefined {
+  const text = msg.content;
   if (!text || text === state.lastChunk) return undefined;
   const delta = state.emittedSnapshot.length > 0 ? `\n\n${text}` : text;
   if (!delta.trim()) return undefined;
@@ -673,6 +758,35 @@ function buildAssistantEvent(msg: SDKMessage, state: MessageEventState): Message
     lastChunk: text,
     emittedSnapshot: snapshot,
   };
+}
+
+function buildToolResultEvent(msg: OcToolResultMessage, _state: MessageEventState): AgentEvent[] {
+  return [
+    {
+      stream: "tool",
+      data: {
+        phase: "result",
+        name: msg.toolName,
+        toolCallId: msg.toolCallId,
+        isError: msg.isError,
+        result: msg.content ?? "notFound",
+      },
+    },
+    {
+      stream: "item",
+      data: {
+        itemId: `tool:${msg.toolCallId}`,
+        phase: "end",
+        kind: "tool",
+        title: msg.toolName,
+        status: msg.isError ? "failed" : "completed",
+        name: msg.toolName,
+        toolCallId: msg.toolCallId,
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  ];
 }
 
 function stripThinkTags(text: string): string {
@@ -711,10 +825,11 @@ function stripThinkTags(text: string): string {
 }
 
 const messageEventBuilders: MessageEventBuilder[] = [
-  { canHandle: (msg) => msg.type === "assistant", build: buildAssistantEvent },
+  { canHandle: (msg) => msg.role === "assistant", build: buildAssistantAndToolCallEvents },
+  { canHandle: (msg) => msg.role === "toolResult", build: buildToolResultEvent },
 ];
 
-function buildMessageEvent(msg: SDKMessage, state: MessageEventState): MessageEvent | undefined {
+function buildMessageEvent(msg: OcMessage, state: MessageEventState): AgentEvent[] | undefined {
   const builder = messageEventBuilders.find((b) => b.canHandle(msg));
   return builder?.build(msg, state);
 }
@@ -772,7 +887,7 @@ async function buildLoopOptions(
   agentId: string,
   appManifest: import("./loop-registry.js").AppManifest,
   overrides?: { extraSystemPrompt?: string; ocHookBridge?: OcHookBridge },
-): Promise<Record<string, unknown>> {
+): Promise<Partial<LoopOptions>> {
   const { params } = session;
 
   const tools = await buildToolDefinitions({
@@ -797,9 +912,29 @@ async function buildLoopOptions(
     composedSystemPrompt,
     overrides?.extraSystemPrompt ?? params.extraSystemPrompt,
   );
+  embeddedAgentLog.debug(`[agentloop] agent ${agentId} systemPrompt: \n${systemPrompt}`);
 
-  const apiKey =
-    process.env.ZTE_API_KEY || params.resolvedApiKey || resolveModelProviderApiKey(params);
+  // 解析 apiKey：优先使用上游已解析的，否则调用 core 解析，最后 fallback 到本地配置读取
+  let apiKey = params.resolvedApiKey;
+  if (!apiKey) {
+    try {
+      const resolvedAuth = await resolveApiKeyForProvider({
+        provider: params.provider,
+        cfg: params.config as import("openclaw/plugin-sdk").OpenClawConfig,
+        store: params.authProfileStore,
+        agentDir: params.agentDir,
+        workspaceDir: params.workspaceDir,
+      });
+      apiKey = resolvedAuth.apiKey;
+    } catch (err) {
+      embeddedAgentLog.warn(
+        `[agentloop] resolveApiKeyForProvider failed for ${params.provider}: ${String(err)}`,
+      );
+    }
+  }
+  if (!apiKey) {
+    apiKey = resolveModelProviderApiKey(params);
+  }
 
   return {
     tools,
@@ -853,9 +988,7 @@ function buildAgentSystemPrompt(
 
 function resolveProviderUrl(params: AgentHarnessAttemptParams): string | undefined {
   try {
-    const providers = (params.config as Record<string, unknown>)?.models?.providers as
-      | Record<string, { baseUrl?: string; apiKey?: string }>
-      | undefined;
+    const providers = (params.config as ConfigWithProviders)?.models?.providers;
     return providers?.[params.provider]?.baseUrl;
   } catch {
     return undefined;
@@ -864,9 +997,7 @@ function resolveProviderUrl(params: AgentHarnessAttemptParams): string | undefin
 
 function resolveProviderApiKey(params: AgentHarnessAttemptParams): string | undefined {
   try {
-    const providers = (params.config as Record<string, unknown>)?.models?.providers as
-      | Record<string, { apiKey?: string }>
-      | undefined;
+    const providers = (params.config as ConfigWithProviders)?.models?.providers;
     return providers?.[params.provider]?.apiKey;
   } catch {
     return undefined;
@@ -879,7 +1010,8 @@ function resolveModelProviderApiKey(params: AgentHarnessAttemptParams): string |
   }
 
   const authHeader =
-    (params.model as any)?.headers?.Authorization || (params.model as any)?.headers?.authorization;
+    (params.model as Record<string, unknown> | undefined)?.headers?.Authorization ||
+    (params.model as Record<string, unknown> | undefined)?.headers?.authorization;
   if (typeof authHeader === "string") {
     const match = authHeader.match(/^Bearer\s+(.+)$/i);
     if (match) {
@@ -888,9 +1020,7 @@ function resolveModelProviderApiKey(params: AgentHarnessAttemptParams): string |
   }
 
   try {
-    const providers = (params.config as Record<string, unknown>)?.models?.providers as
-      | Record<string, { apiKey?: string }>
-      | undefined;
+    const providers = (params.config as ConfigWithProviders)?.models?.providers;
     const key = providers?.[params.provider]?.apiKey;
     if (key) {
       return key;

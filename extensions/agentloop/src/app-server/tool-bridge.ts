@@ -14,64 +14,69 @@ import {
 import type { AnyAgentTool } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { applyDynamicToolProfile } from "./dynamic-tool-profile.js";
 
-export async function buildToolDefinitions(
-  params: AgentHarnessAttemptParams & {
-    pluginConfig?: Record<string, unknown>;
-    toolTimeoutMs?: number;
-  },
-): Promise<UnifiedTool[]> {
-  const p = params as Record<string, unknown>;
+type ContentItem = { type: string; text?: string };
 
-  if (p.disableTools || !supportsModelTools(p.model)) {
+type ToolBridgeBaseParams = AgentHarnessAttemptParams & {
+  pluginConfig?: Record<string, unknown>;
+  toolTimeoutMs?: number;
+  signal?: AbortSignal;
+};
+
+type ToolBridgeDefinitionParams = ToolBridgeBaseParams;
+
+type ToolBridgeHandleParams = ToolBridgeBaseParams & {
+  agentId: string;
+  signal: AbortSignal;
+};
+
+export async function buildToolDefinitions(
+  params: ToolBridgeDefinitionParams,
+): Promise<UnifiedTool[]> {
+  if (params.disableTools || !supportsModelTools(params.model)) {
     return [];
   }
 
   const allTools = createOpenClawCodingTools({
-    agentId: (p.agentId as string) ?? "",
-    sessionKey: (p.sessionKey as string) ?? (p.sessionId as string) ?? "",
-    sessionId: (p.sessionId as string) ?? "",
-    runId: (p.runId as string) ?? "",
-    config: p.config,
-    agentDir: (p.agentDir as string) ?? (p.workspaceDir as string) ?? "",
-    workspaceDir: (p.workspaceDir as string) ?? "",
-    modelProvider: p.provider as string,
-    modelId: p.modelId as string,
-    modelApi:
-      typeof (p.model as Record<string, unknown>)?.api === "string"
-        ? ((p.model as Record<string, unknown>).api as string)
-        : undefined,
+    agentId: params.agentId ?? "",
+    sessionKey: params.sessionKey ?? params.sessionId ?? "",
+    sessionId: params.sessionId ?? "",
+    runId: params.runId ?? "",
+    config: params.config,
+    agentDir: params.agentDir ?? params.workspaceDir ?? "",
+    workspaceDir: params.workspaceDir ?? "",
+    modelProvider: params.provider,
+    modelId: params.modelId,
+    modelApi: typeof params.model?.api === "string" ? params.model.api : undefined,
     modelContextWindowTokens:
-      typeof (p.model as Record<string, unknown>)?.contextWindow === "number"
-        ? ((p.model as Record<string, unknown>).contextWindow as number)
-        : undefined,
-    messageProvider: (p.messageChannel as string) ?? (p.messageProvider as string),
-    messageTo: p.messageTo as string,
-    messageThreadId: p.messageThreadId as string | number,
-    groupId: p.groupId as string | null,
-    groupChannel: p.groupChannel as string | null,
-    groupSpace: p.groupSpace as string | null,
-    spawnedBy: p.spawnedBy as string | null,
-    senderId: p.senderId as string | null,
-    senderName: p.senderName as string | null,
-    senderUsername: p.senderUsername as string | null,
-    senderE164: p.senderE164 as string | null,
-    senderIsOwner: p.senderIsOwner as boolean,
-    currentChannelId: p.currentChannelId as string,
-    currentThreadTs: p.currentThreadTs as string,
-    currentMessageId: p.currentMessageId as string | number,
-    abortSignal: p.signal as AbortSignal,
-    exec: p.execOverrides,
-    sandbox: p.sandbox,
-    agentAccountId: p.agentAccountId as string,
-    allowGatewaySubagentBinding: p.allowGatewaySubagentBinding as boolean,
-    replyToMode: p.replyToMode as string,
-    hasRepliedRef: p.hasRepliedRef,
-    requireExplicitMessageTarget: p.requireExplicitMessageTarget as boolean,
-    disableMessageTool: p.disableMessageTool as boolean,
+      typeof params.model?.contextWindow === "number" ? params.model.contextWindow : undefined,
+    messageProvider: params.messageChannel ?? params.messageProvider,
+    messageTo: params.messageTo,
+    messageThreadId: params.messageThreadId,
+    groupId: params.groupId,
+    groupChannel: params.groupChannel,
+    groupSpace: params.groupSpace,
+    spawnedBy: params.spawnedBy,
+    senderId: params.senderId,
+    senderName: params.senderName,
+    senderUsername: params.senderUsername,
+    senderE164: params.senderE164,
+    senderIsOwner: params.senderIsOwner,
+    currentChannelId: params.currentChannelId,
+    currentThreadTs: params.currentThreadTs,
+    currentMessageId: params.currentMessageId,
+    abortSignal: params.signal,
+    exec: params.execOverrides,
+    sandbox: params.sandbox,
+    agentAccountId: params.agentAccountId,
+    allowGatewaySubagentBinding: params.allowGatewaySubagentBinding,
+    replyToMode: params.replyToMode,
+    hasRepliedRef: params.hasRepliedRef,
+    requireExplicitMessageTarget: params.requireExplicitMessageTarget,
+    disableMessageTool: params.disableMessageTool,
   });
 
   const toolTimeoutMs = params.toolTimeoutMs ?? 30000;
-  const profiled = applyDynamicToolProfile(allTools as unknown as AnyAgentTool[], {
+  const profiled = applyDynamicToolProfile(allTools as AnyAgentTool[], {
     toolTimeoutMs,
   });
 
@@ -79,7 +84,7 @@ export async function buildToolDefinitions(
     `[agentloop] built tools total=${allTools.length} profiled=${profiled.length}`,
   );
 
-  const sessionSignal = params.signal as AbortSignal | undefined;
+  const sessionSignal = params.signal;
   return profiled.map((tool) => toUnifiedTool(tool, toolTimeoutMs, sessionSignal));
 }
 
@@ -115,65 +120,53 @@ function toUnifiedTool(
 }
 
 export async function buildToolBridgeHandle(
-  params: AgentHarnessAttemptParams & {
-    pluginConfig?: Record<string, unknown>;
-    agentId: string;
-    signal: AbortSignal;
-    toolTimeoutMs?: number;
-  },
+  params: ToolBridgeHandleParams,
 ): Promise<ToolBridgeHandle | undefined> {
-  const p = params as Record<string, unknown>;
-
-  if (p.disableTools || !supportsModelTools(p.model)) {
+  if (params.disableTools || !supportsModelTools(params.model)) {
     return undefined;
   }
 
   const allTools = createOpenClawCodingTools({
-    agentId: (p.agentId as string) ?? "",
-    sessionKey: (p.sessionKey as string) ?? (p.sessionId as string) ?? "",
-    sessionId: (p.sessionId as string) ?? "",
-    runId: (p.runId as string) ?? "",
-    config: p.config,
-    agentDir: (p.agentDir as string) ?? (p.workspaceDir as string) ?? "",
-    workspaceDir: (p.workspaceDir as string) ?? "",
-    modelProvider: p.provider as string,
-    modelId: p.modelId as string,
-    modelApi:
-      typeof (p.model as Record<string, unknown>)?.api === "string"
-        ? ((p.model as Record<string, unknown>).api as string)
-        : undefined,
+    agentId: params.agentId ?? "",
+    sessionKey: params.sessionKey ?? params.sessionId ?? "",
+    sessionId: params.sessionId ?? "",
+    runId: params.runId ?? "",
+    config: params.config,
+    agentDir: params.agentDir ?? params.workspaceDir ?? "",
+    workspaceDir: params.workspaceDir ?? "",
+    modelProvider: params.provider,
+    modelId: params.modelId,
+    modelApi: typeof params.model?.api === "string" ? params.model.api : undefined,
     modelContextWindowTokens:
-      typeof (p.model as Record<string, unknown>)?.contextWindow === "number"
-        ? ((p.model as Record<string, unknown>).contextWindow as number)
-        : undefined,
-    messageProvider: (p.messageChannel as string) ?? (p.messageProvider as string),
-    messageTo: p.messageTo as string,
-    messageThreadId: p.messageThreadId as string | number,
-    groupId: p.groupId as string | null,
-    groupChannel: p.groupChannel as string | null,
-    groupSpace: p.groupSpace as string | null,
-    spawnedBy: p.spawnedBy as string | null,
-    senderId: p.senderId as string | null,
-    senderName: p.senderName as string | null,
-    senderUsername: p.senderUsername as string | null,
-    senderE164: p.senderE164 as string | null,
-    senderIsOwner: p.senderIsOwner as boolean,
-    currentChannelId: p.currentChannelId as string,
-    currentThreadTs: p.currentThreadTs as string,
-    currentMessageId: p.currentMessageId as string | number,
+      typeof params.model?.contextWindow === "number" ? params.model.contextWindow : undefined,
+    messageProvider: params.messageChannel ?? params.messageProvider,
+    messageTo: params.messageTo,
+    messageThreadId: params.messageThreadId,
+    groupId: params.groupId,
+    groupChannel: params.groupChannel,
+    groupSpace: params.groupSpace,
+    spawnedBy: params.spawnedBy,
+    senderId: params.senderId,
+    senderName: params.senderName,
+    senderUsername: params.senderUsername,
+    senderE164: params.senderE164,
+    senderIsOwner: params.senderIsOwner,
+    currentChannelId: params.currentChannelId,
+    currentThreadTs: params.currentThreadTs,
+    currentMessageId: params.currentMessageId,
     abortSignal: params.signal,
-    exec: p.execOverrides,
-    sandbox: p.sandbox,
-    agentAccountId: p.agentAccountId as string,
-    allowGatewaySubagentBinding: p.allowGatewaySubagentBinding as boolean,
-    replyToMode: p.replyToMode as string,
-    hasRepliedRef: p.hasRepliedRef,
-    requireExplicitMessageTarget: p.requireExplicitMessageTarget as boolean,
-    disableMessageTool: p.disableMessageTool as boolean,
+    exec: params.execOverrides,
+    sandbox: params.sandbox,
+    agentAccountId: params.agentAccountId,
+    allowGatewaySubagentBinding: params.allowGatewaySubagentBinding,
+    replyToMode: params.replyToMode,
+    hasRepliedRef: params.hasRepliedRef,
+    requireExplicitMessageTarget: params.requireExplicitMessageTarget,
+    disableMessageTool: params.disableMessageTool,
   });
 
   const toolTimeoutMs = params.toolTimeoutMs ?? 30000;
-  const profiled = applyDynamicToolProfile(allTools as unknown as AnyAgentTool[], {
+  const profiled = applyDynamicToolProfile(allTools as AnyAgentTool[], {
     toolTimeoutMs,
   });
 
@@ -252,7 +245,7 @@ export async function buildToolBridgeHandle(
             timestamp: Date.now(),
           },
           sessionId: params.sessionId,
-          cwd: (params as Record<string, unknown>).workspaceDir as string | undefined,
+          cwd: params.workspaceDir,
         }).catch((err) =>
           embeddedAgentLog.warn(`[agentloop] failed to append tool-call transcript: ${err}`),
         );
@@ -318,7 +311,7 @@ export async function buildToolBridgeHandle(
               timestamp: Date.now(),
             },
             sessionId: params.sessionId,
-            cwd: (params as Record<string, unknown>).workspaceDir as string | undefined,
+            cwd: params.workspaceDir,
           }).catch((err) =>
             embeddedAgentLog.warn(`[agentloop] failed to append tool-result transcript: ${err}`),
           );
@@ -382,7 +375,7 @@ export async function buildToolBridgeHandle(
               timestamp: Date.now(),
             },
             sessionId: params.sessionId,
-            cwd: (params as Record<string, unknown>).workspaceDir as string | undefined,
+            cwd: params.workspaceDir,
           }).catch((err) =>
             embeddedAgentLog.warn(`[agentloop] failed to append tool-error transcript: ${err}`),
           );
@@ -430,7 +423,7 @@ export async function buildToolBridgeHandle(
   };
 }
 
-function sanitizeToolArgs(args: unknown): unknown {
+export function sanitizeToolArgs(args: unknown): Record<string, unknown> | unknown {
   if (!args || typeof args !== "object") {
     return args;
   }
@@ -458,7 +451,7 @@ function sanitizeToolArgs(args: unknown): unknown {
   return cleaned;
 }
 
-function extractTextContentItems(result: unknown): Array<{ type: string; text?: string }> {
+function extractTextContentItems(result: unknown): ContentItem[] {
   if (!result || typeof result !== "object") {
     return [{ type: "text", text: String(result) }];
   }
