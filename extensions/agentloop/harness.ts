@@ -109,29 +109,6 @@ export function createAgentLoopHarness(options?: AgentLoopHarnessOptions): Agent
       try {
         const loopRegistry = await ensureAppsLoaded(params);
 
-        // P0: before_agent_reply — plugins can return synthetic reply, short-circuiting the agent
-        const hookRunner = getGlobalHookRunner();
-        if (hookRunner?.hasHooks("before_agent_reply")) {
-          const beforeReplyResult = await hookRunner.runBeforeAgentReply(
-            { cleanedBody: params.prompt },
-            {
-              agentId: params.agentId ?? "",
-              sessionKey: params.sessionKey,
-              sessionId: params.sessionId,
-              workspaceDir: params.workspaceDir,
-              runId: params.runId,
-              trigger: "user",
-            },
-          );
-          if (beforeReplyResult?.handled) {
-            return {
-              assistantTexts: [beforeReplyResult.reply ?? ""],
-              finishReason: "stop",
-              itemLifecycle: { started: 1, completed: 1, skipped: 0, aborted: 0 },
-            };
-          }
-        }
-
         prepared = await this.prepare(params);
         session = await this.start(prepared);
         rawResult = await this.send(session, { loopRegistry });

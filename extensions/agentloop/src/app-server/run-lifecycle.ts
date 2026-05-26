@@ -23,6 +23,7 @@ import { createOcHookBridge, type OcHookBridge } from "./oc-hook-bridge.js";
 import { readAgentLoopBinding, writeAgentLoopBinding } from "./session-binding.js";
 import { composeSystemPrompt } from "./system-prompt.js";
 import { buildToolDefinitions, buildToolBridgeHandle, sanitizeToolArgs } from "./tool-bridge.js";
+import { buildSdkHooks } from "./oc-hook-bridge.js";
 
 // ── Internal message types (extractMessages output / buildMessageEvent input) ──
 
@@ -936,6 +937,11 @@ async function buildLoopOptions(
     apiKey = resolveModelProviderApiKey(params);
   }
 
+  // Convert OC hook bridge to SDKHooks for DEI path (session-runtime reads options.hooks)
+  const hooks = overrides?.ocHookBridge
+    ? buildSdkHooks(overrides.ocHookBridge)
+    : undefined;
+
   return {
     tools,
     ...(params.toolsAllow ? { allowedTools: params.toolsAllow } : {}),
@@ -958,6 +964,8 @@ async function buildLoopOptions(
     timeout: params.timeoutMs,
     ...(params.signal ? { signal: params.signal } : {}),
     ...(overrides?.ocHookBridge ? { ocHookBridge: overrides.ocHookBridge } : {}),
+
+    ...(hooks ? { hooks } : {}),
   };
 }
 

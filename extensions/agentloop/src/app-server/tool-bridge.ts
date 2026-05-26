@@ -7,9 +7,6 @@ import {
   createAgentToolResultMiddlewareRunner,
   emitAgentEvent,
   appendSessionTranscriptMessage,
-  isToolWrappedWithBeforeToolCallHook,
-  runAgentHarnessAfterToolCallHook,
-  wrapToolWithBeforeToolCallHook,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import type { AnyAgentTool } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { applyDynamicToolProfile } from "./dynamic-tool-profile.js";
@@ -84,14 +81,29 @@ export async function buildToolDefinitions(
     `[agentloop] built tools total=${allTools.length} profiled=${profiled.length}`,
   );
 
-  const sessionSignal = params.signal;
-  return profiled.map((tool) => toUnifiedTool(tool, toolTimeoutMs, sessionSignal));
+  const hookContext = {
+    agentId: params.agentId ?? "",
+    sessionId: params.sessionId ?? "",
+    sessionKey: params.sessionKey ?? params.sessionId ?? "",
+    runId: params.runId ?? "",
+  };
+
+  const middlewareRunner = createAgentToolResultMiddlewareRunner({
+    runtime: "agentloop",
+    ...hookContext,
+  });
+
+  const sessionSignal = params.signal as AbortSignal | undefined;
+  return profiled.map((tool) =>
+    toUnifiedTool(tool, toolTimeoutMs, sessionSignal, middlewareRunner),
+  );
 }
 
 function toUnifiedTool(
   tool: AnyAgentTool,
   toolTimeoutMs: number,
   sessionSignal?: AbortSignal,
+  middlewareRunner?: ReturnType<typeof createAgentToolResultMiddlewareRunner>,
 ): UnifiedTool {
   return {
     name: tool.name,
@@ -105,6 +117,18 @@ function toUnifiedTool(
         tool.prepareArguments?.(args) ?? (args === null || args === undefined ? {} : args);
       try {
         const result = await tool.execute(callId, preparedArgs, signal);
+        if (middlewareRunner) {
+          const middlewareResult = await middlewareRunner.applyToolResultMiddleware({
+            threadId: "",
+            turnId: "",
+            toolCallId: callId,
+            toolName: tool.name,
+            args: preparedArgs,
+            result,
+          });
+          console.log("[tool-bridge] middleware result:", JSON.stringify(middlewareResult));
+          return middlewareResult;
+        }
         console.log("[tool-bridge] result:", JSON.stringify(result));
         return result;
       } catch (error) {
@@ -179,15 +203,11 @@ export async function buildToolBridgeHandle(
     runId: params.runId,
   };
 
-  const tools = profiled.map((tool) =>
-    isToolWrappedWithBeforeToolCallHook(tool)
-      ? tool
-      : wrapToolWithBeforeToolCallHook(tool, hookContext),
-  );
+  const tools = profiled;
 
   const toolMap = new Map(tools.map((tool) => [tool.name, tool]));
   const middlewareRunner = createAgentToolResultMiddlewareRunner({
-    runtime: "pi",
+    runtime: "agentloop",
     ...hookContext,
   });
 
@@ -283,18 +303,6 @@ export async function buildToolBridgeHandle(
           result: rawResult,
         });
 
-        void runAgentHarnessAfterToolCallHook({
-          toolName: tool.name,
-          toolCallId,
-          runId: hookContext.runId,
-          agentId: hookContext.agentId,
-          sessionId: hookContext.sessionId,
-          sessionKey: hookContext.sessionKey,
-          startArgs: args,
-          result: middlewareResult,
-          startedAt,
-        });
-
         const resultText = extractTextContentItems(middlewareResult)
           .map((i) => i.text)
           .filter((t): t is string => t != null)
@@ -349,18 +357,6 @@ export async function buildToolBridgeHandle(
           success: !wasAborted,
         };
       } catch (error) {
-        void runAgentHarnessAfterToolCallHook({
-          toolName: tool.name,
-          toolCallId,
-          runId: hookContext.runId,
-          agentId: hookContext.agentId,
-          sessionId: hookContext.sessionId,
-          sessionKey: hookContext.sessionKey,
-          startArgs: args,
-          error: error instanceof Error ? error.message : String(error),
-          startedAt,
-        });
-
         const errorText = error instanceof Error ? error.message : String(error);
 
         if (params.sessionFile) {
