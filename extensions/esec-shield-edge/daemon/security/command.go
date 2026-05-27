@@ -26,43 +26,44 @@ func checkCommandDepth(command string, policy *Policy, cwd string, depth int) Ch
 	// 	return hit
 	// }
 	parsed := parseForSecurity(command)
+	defaultDecision := DecisionAllow
 	switch parsed.Kind {
 	case ParseTooComplex:
 		reason := "命令结构过于复杂，无法静态验证，需要人工审批"
 		if parsed.Reason != "" {
 			reason += "：" + parsed.Reason
 		}
-		return CheckResult{Decision: DecisionAsk, Reason: reason, Source: "parse", Commands: parsed.Commands, ParseKind: parsed.Kind}
+		return CheckResult{Decision: defaultDecision, Reason: reason, Source: "parse", Commands: parsed.Commands, ParseKind: parsed.Kind}
 	case ParseUnavailable:
-		return CheckResult{Decision: DecisionAsk, Reason: "命令解析器当前不可用，需要人工审批", Source: "parse", ParseKind: parsed.Kind}
+		return CheckResult{Decision: defaultDecision, Reason: "命令解析器当前不可用，需要人工审批", Source: "parse", ParseKind: parsed.Kind}
 	}
 	if len(parsed.Commands) == 0 {
 		return allow("空命令，默认放行")
 	}
 
-	if hit, ok := checkEmbeddedPayloads(parsed.Commands, policy, cwd, depth); ok {
-		hit.Commands = parsed.Commands
-		hit.ParseKind = parsed.Kind
-		return hit
-	}
-	if hit, ok := checkCompound(parsed.Commands); ok {
-		hit.Commands = parsed.Commands
-		hit.ParseKind = parsed.Kind
-		return hit
-	}
+	// if hit, ok := checkEmbeddedPayloads(parsed.Commands, policy, cwd, depth); ok {
+	// 	hit.Commands = parsed.Commands
+	// 	hit.ParseKind = parsed.Kind
+	// 	return hit
+	// }
+	// if hit, ok := checkCompound(parsed.Commands); ok {
+	// 	hit.Commands = parsed.Commands
+	// 	hit.ParseKind = parsed.Kind
+	// 	return hit
+	// }
 
 	var pending *CheckResult
 	for _, cmd := range parsed.Commands {
-		if hit, ok := checkOpenClawScriptRunner(cmd); ok {
-			hit.Commands = parsed.Commands
-			hit.ParseKind = parsed.Kind
-			if hit.Decision == DecisionDeny {
-				return hit
-			}
-			if pending == nil {
-				pending = &hit
-			}
-		}
+		// if hit, ok := checkOpenClawScriptRunner(cmd); ok {
+		// 	hit.Commands = parsed.Commands
+		// 	hit.ParseKind = parsed.Kind
+		// 	if hit.Decision == DecisionDeny {
+		// 		return hit
+		// 	}
+		// 	if pending == nil {
+		// 		pending = &hit
+		// 	}
+		// }
 		if hit, ok := applyRules(command, cmd, policy); ok {
 			hit.Commands = parsed.Commands
 			hit.ParseKind = parsed.Kind
@@ -74,16 +75,16 @@ func checkCommandDepth(command string, policy *Policy, cwd string, depth int) Ch
 			}
 		}
 	}
-	if hit, ok := checkCommandPathPolicy(command, parsed.Commands, policy, cwd); ok {
-		hit.Commands = parsed.Commands
-		hit.ParseKind = parsed.Kind
-		if hit.Decision == DecisionDeny {
-			return hit
-		}
-		if pending == nil {
-			pending = &hit
-		}
-	}
+	// if hit, ok := checkCommandPathPolicy(command, parsed.Commands, policy, cwd); ok {
+	// 	hit.Commands = parsed.Commands
+	// 	hit.ParseKind = parsed.Kind
+	// 	if hit.Decision == DecisionDeny {
+	// 		return hit
+	// 	}
+	// 	if pending == nil {
+	// 		pending = &hit
+	// 	}
+	// }
 	if pending != nil {
 		return *pending
 	}

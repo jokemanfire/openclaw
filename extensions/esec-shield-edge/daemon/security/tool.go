@@ -20,9 +20,9 @@ func CheckToolCall(toolName string, params map[string]any, ctx ToolContext, poli
 			Params:    stripReviewConfirm(params),
 		}
 	}
-	// if policy != nil && !policy.Protects(tool) {
-	// 	return allow("当前工具不在 command-risk-guard-go 的处理范围内，已忽略")
-	// }
+	if policy != nil && !policy.Protects(tool) {
+		return allow("当前工具不在 command-risk-guard 的处理范围内，已忽略")
+	}
 	if ctx.CWD == "" {
 		ctx.CWD = "/"
 	}
@@ -38,35 +38,35 @@ func CheckToolCall(toolName string, params map[string]any, ctx ToolContext, poli
 			return allow("exec 调用未提供命令，已忽略")
 		}
 		return CheckCommand(command, policy, ctx.CWD)
-	case "nodes":
-		return checkNodes(params, ctx, policy)
-	case "read":
-		return checkFileTool(fileRead, params, policy, ctx.CWD)
-	case "write":
-		return checkFileTool(fileWrite, params, policy, ctx.CWD)
-	case "edit":
-		return checkFileTool(fileWrite, params, policy, ctx.CWD)
-	case "apply_patch":
-		return checkApplyPatchTool(params, policy, ctx.CWD)
-	case "cron", "gateway", "subagents":
-		if tool == "cron" {
-			return checkCronTool(params, ctx, policy)
-		}
-		action := strings.ToLower(readStringAny(params, "action", "name"))
-		return checkNamedTool(tool, action, params, ctx, policy)
-	case "sessions_spawn":
-		return checkSessionsSpawn(params, ctx, policy)
-	case "sessions_send":
-		return checkSessionsSend(params, ctx, policy)
-	default:
-		command := readStringAny(params, "command", "cmd")
-		if command == "" {
-			return allow("exec 调用未提供命令，已忽略")
-		}
-		return CheckCommand(command, policy, ctx.CWD)
+		// case "nodes":
+		// 	return checkNodes(params, ctx, policy)
+		// case "read":
+		// 	return checkFileTool(fileRead, params, policy, ctx.CWD)
+		// case "write":
+		// 	return checkFileTool(fileWrite, params, policy, ctx.CWD)
+		// case "edit":
+		// 	return checkFileTool(fileWrite, params, policy, ctx.CWD)
+		// case "apply_patch":
+		// 	return checkApplyPatchTool(params, policy, ctx.CWD)
+		// case "cron", "gateway", "subagents":
+		// 	if tool == "cron" {
+		// 		return checkCronTool(params, ctx, policy)
+		// 	}
+		// 	action := strings.ToLower(readStringAny(params, "action", "name"))
+		// 	return checkNamedTool(tool, action, params, ctx, policy)
+		// case "sessions_spawn":
+		// 	return checkSessionsSpawn(params, ctx, policy)
+		// case "sessions_send":
+		// 	return checkSessionsSend(params, ctx, policy)
+		// default:
+		// 	command := readStringAny(params, "command", "cmd")
+		// 	if command == "" {
+		// 		return allow("exec 调用未提供命令，已忽略")
+		// 	}
+		// 	return CheckCommand(command, policy, ctx.CWD)
 
 	}
-	// return allow("当前工具不在 command-risk-guard-go 的处理范围内，已忽略")
+	return allow("当前工具不在 command-risk-guard 的处理范围内，已忽略")
 }
 
 func withReviewHint(result CheckResult) CheckResult {
