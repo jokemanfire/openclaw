@@ -8,7 +8,6 @@
   },
   "type": "module",
   "dependencies": {
-    "@openclaw/unixsocket-provider": "workspace:*",
     "jiti": "^2.6.1",
     "zod": "^4.4.1"
   },
@@ -16,6 +15,7 @@
     "@openclaw/plugin-sdk": "workspace:*"
   },
   "optionalDependencies": {
+    "@openclaw/unixsocket-provider": "workspace:*",
     "@zte/agentloop-sdk": "file:zte-agentloop-sdk-6.26.20-b4.tgz"
   },
   "openclaw": {
