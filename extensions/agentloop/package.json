@@ -8,6 +8,7 @@
   },
   "type": "module",
   "dependencies": {
+    "@openclaw/unixsocket-provider": "workspace:*",
     "jiti": "^2.6.1",
     "zod": "^4.4.1"
   },

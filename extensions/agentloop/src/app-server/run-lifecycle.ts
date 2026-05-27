@@ -30,42 +30,8 @@ import { readAgentLoopBinding, writeAgentLoopBinding } from "./session-binding.j
 import { readMappingSessionHistoryMessages } from "./session-history.js";
 import { composeSystemPrompt } from "./system-prompt.js";
 import { buildToolDefinitions, buildToolBridgeHandle, sanitizeToolArgs } from "./tool-bridge.js";
-
-// ── Internal message types (extractMessages output / buildMessageEvent input) ──
-
-type OcAssistantTextMessage = {
-  role: "assistant";
-  content: string;
-  timestamp: number;
-};
-
-type OcAssistantToolCallMessage = {
-  role: "assistant";
-  toolCallId: string;
-  content: Array<{ type: "toolCall"; name: string; arguments: unknown }>;
-  timestamp: number;
-};
-
-type OcToolResultMessage = {
-  role: "toolResult";
-  toolCallId: string;
-  toolName: string;
-  content: unknown;
-  isError?: boolean;
-  timestamp: number;
-};
-
-type OcMessage = OcAssistantTextMessage | OcAssistantToolCallMessage | OcToolResultMessage;
-
-// ── Agent event type ──
-
-type AgentEvent = {
-  stream: string;
-  data: Record<string, unknown>;
-  text?: string;
-  lastChunk?: string;
-  emittedSnapshot?: string;
-};
+import type { OcMessage, AgentEvent, MessageEventState } from "./types.js";
+import { isUnixSocketProvider, sendUnixSocketStream } from "./unixsocket-stream.js";
 
 // ── Config helper type for provider lookups ──
 
@@ -356,38 +322,70 @@ export async function sendAgentLoopAttempt(
     );
   }
 
-  try {
-    embeddedAgentLog.info(
-      `[agentloop] loop.run starting agentId=${agentId} model=${params.modelId} session: ${params.sessionId} sessionKey: ${params.sessionKey}`,
-    );
-    const result: LoopResult = loop.run(promptInput, loopOptions);
-    for await (const msg of result) {
-      messages.push(msg);
-      embeddedAgentLog.debug(`[agentloop] raw msg =${JSON.stringify(msg)}`);
+  // ── Unix Socket provider: bypass loop.run(), call unixsocket StreamFn directly ──
+  if (isUnixSocketProvider(params)) {
+    try {
+      embeddedAgentLog.info(
+        `[agentloop:unixsocket] starting agentId=${agentId} model=${params.modelId} session=${params.sessionId}`,
+      );
+      const composedSystemPrompt = composeSystemPrompt(params, [], appManifest);
+      const systemPrompt = buildAgentSystemPrompt(
+        appManifest?.loop_mode?.find((l) => l.id === agentId)?.systemPrompt,
+        composedSystemPrompt,
+        effectiveExtraSystemPrompt ?? params.extraSystemPrompt,
+      );
+      const unixResult = await sendUnixSocketStream(
+        params,
+        effectivePrompt,
+        systemPrompt,
+        { pushAgentEvent },
+        session.signal,
+      );
+      messages = unixResult.messages;
+      assistantTexts = unixResult.assistantTexts;
+    } catch (error) {
+      success = false;
+      embeddedAgentLog.warn(
+        `[agentloop:unixsocket] failed agentId=${agentId} error=${String(error)}`,
+      );
+    }
+  } else {
+    // ── Standard path: loop.run() via agentloop-sdk ──
+    try {
+      embeddedAgentLog.info(
+        `[agentloop] loop.run starting agentId=${agentId} model=${params.modelId} session: ${params.sessionId} sessionKey: ${params.sessionKey}`,
+      );
+      const result: LoopResult = loop.run(promptInput, loopOptions);
+      for await (const msg of result) {
+        messages.push(msg);
+        embeddedAgentLog.debug(`[agentloop] raw msg =${JSON.stringify(msg)}`);
 
-      const ccToolMap = extractToolMap(messages);
-      const ocMessages = extractMessages(msg, ccToolMap);
-      totalOcMessages.push(...ocMessages);
+        const ccToolMap = extractToolMap(messages);
+        const ocMessages = extractMessages(msg, ccToolMap);
+        totalOcMessages.push(...ocMessages);
 
-      for (const ocMsg of ocMessages) {
-        const events = buildMessageEvent(ocMsg, { lastChunk, emittedSnapshot });
-        if (!events) continue;
-        for (const event of events) {
-          if (event.stream === "assistant") {
-            lastChunk = event.lastChunk ?? "";
-            emittedSnapshot = event.emittedSnapshot ?? "";
-            assistantTexts.push(event.text ?? "");
-          } else {
-            lastChunk = "";
-            emittedSnapshot = "";
+        for (const ocMsg of ocMessages) {
+          const events = buildMessageEvent(ocMsg, { lastChunk, emittedSnapshot });
+          if (!events) continue;
+          for (const event of events) {
+            if (event.stream === "assistant") {
+              lastChunk = event.lastChunk ?? "";
+              emittedSnapshot = event.emittedSnapshot ?? "";
+              assistantTexts.push(event.text ?? "");
+            } else {
+              lastChunk = "";
+              emittedSnapshot = "";
+            }
+            pushAgentEvent(event.stream, event.data);
           }
-          pushAgentEvent(event.stream, event.data);
         }
       }
+    } catch (error) {
+      success = false;
+      embeddedAgentLog.warn(
+        `[agentloop] loop.run failed agentId=${agentId} error=${String(error)}`,
+      );
     }
-  } catch (error) {
-    success = false;
-    embeddedAgentLog.warn(`[agentloop] loop.run failed agentId=${agentId} error=${String(error)}`);
   }
 
   try {
@@ -706,7 +704,6 @@ function extractAssistantMsgs(msg: SDKMessage): OcMessage[] {
   return result;
 }
 
-type MessageEventState = { lastChunk: string; emittedSnapshot: string };
 type MessageEvent = {
   text: string;
   data: Record<string, unknown>;

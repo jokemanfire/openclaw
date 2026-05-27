@@ -319,6 +319,9 @@ importers:
 
   extensions/agentloop:
     dependencies:
+      '@openclaw/unixsocket-provider':
+        specifier: workspace:*
+        version: link:../unixsocket
       jiti:
         specifier: ^2.6.1
         version: 2.6.1
@@ -510,6 +513,12 @@ importers:
         version: link:../../packages/plugin-sdk
 
   extensions/comfy:
+    devDependencies:
+      '@openclaw/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+
+  extensions/context-projection-optimizer:
     devDependencies:
       '@openclaw/plugin-sdk':
         specifier: workspace:*
