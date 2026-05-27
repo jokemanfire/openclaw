@@ -11,6 +11,7 @@ import type {
   AgentHarnessResetParams,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { createAppLoader } from "./src/app-server/app-loader.js";
+import type { AgentLoopPluginConfig } from "./src/app-server/config.js";
 import { loadAppManifests, type LoopRegistry } from "./src/app-server/loop-registry.js";
 import {
   prepareAgentLoopAttempt,
@@ -23,7 +24,7 @@ import {
 } from "./src/app-server/run-lifecycle.js";
 
 export type AgentLoopHarnessOptions = {
-  pluginConfig?: unknown;
+  pluginConfig?: AgentLoopPluginConfig;
   pluginRootDir?: string;
 };
 
@@ -94,6 +95,23 @@ export function createAgentLoopHarness(options?: AgentLoopHarnessOptions): Agent
     deliveryDefaults: { sourceVisibleReplies: "message_tool" },
 
     async init(): Promise<LoopRegistry> {
+      const sdk = await import("@zte/agentloop-sdk/sdk");
+      const sdkLog = embeddedAgentLog.child("agentloop-sdk");
+      if (typeof (sdk as Record<string, unknown>).setSdkLogger === "function") {
+        (
+          (sdk as Record<string, unknown>).setSdkLogger as (logger: {
+            debug: (msg: string) => void;
+            info: (msg: string) => void;
+            warn: (msg: string) => void;
+            error: (msg: string) => void;
+          }) => void
+        )({
+          debug: (msg: string) => sdkLog.debug(msg),
+          info: (msg: string) => sdkLog.info(msg),
+          warn: (msg: string) => sdkLog.warn(msg),
+          error: (msg: string) => sdkLog.error(msg),
+        });
+      }
       return getLoopRegistry();
     },
 

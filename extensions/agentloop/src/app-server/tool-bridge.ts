@@ -1,4 +1,4 @@
-import type { UnifiedTool, ToolBridgeHandle } from "@zte/agentloop-sdk/sdk";
+import { sdkLog, type UnifiedTool, type ToolBridgeHandle } from "@zte/agentloop-sdk/sdk";
 import { createOpenClawCodingTools } from "openclaw/plugin-sdk/agent-harness";
 import {
   embeddedAgentLog,
@@ -110,7 +110,7 @@ function toUnifiedTool(
     description: tool.description,
     parameters: (tool.parameters as Record<string, unknown>) ?? {},
     execute: async (args: Record<string, unknown>) => {
-      console.log("[tool-bridge] calling tool:", tool.name, "args:", JSON.stringify(args));
+      sdkLog.info("[tool-bridge] calling tool:", tool.name, "args:", args);
       const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const { signal, clear } = createToolAbortSignal(toolTimeoutMs, sessionSignal, tool.name);
       const preparedArgs =
@@ -126,14 +126,14 @@ function toUnifiedTool(
             args: preparedArgs,
             result,
           });
-          console.log("[tool-bridge] middleware result:", JSON.stringify(middlewareResult));
+          sdkLog.info("[tool-bridge] middleware result:", JSON.stringify(middlewareResult));
           return middlewareResult;
         }
         console.log("[tool-bridge] result:", JSON.stringify(result));
         return result;
       } catch (error) {
         if (signal.aborted) {
-          embeddedAgentLog.warn(`[agentloop] tool "${tool.name}" aborted (callId=${callId})`);
+          sdkLog.warn(`[agentloop] tool "${tool.name}" aborted (callId=${callId})`);
         }
         throw error;
       } finally {

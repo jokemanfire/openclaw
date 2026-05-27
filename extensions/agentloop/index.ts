@@ -1,14 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { embeddedAgentLog } from "openclaw/plugin-sdk/agent-harness-runtime";
+import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { createAgentLoopHarness } from "./harness.js";
+import type { AgentLoopPluginConfig } from "./src/app-server/config.js";
 
 function resolveSourcePluginRoot(distRootDir: string): string {
-  const distMarkers = [
-    `${path.sep}dist${path.sep}`,
-    `${path.sep}dist-runtime${path.sep}`,
-  ];
+  const distMarkers = [`${path.sep}dist${path.sep}`, `${path.sep}dist-runtime${path.sep}`];
   for (const distMarker of distMarkers) {
     const distIdx = distRootDir.indexOf(distMarker);
     if (distIdx === -1) continue;
@@ -41,7 +39,7 @@ export default definePluginEntry({
     }
 
     const harness = createAgentLoopHarness({
-      pluginConfig: api.pluginConfig,
+      pluginConfig: api.pluginConfig as AgentLoopPluginConfig | undefined,
       pluginRootDir,
     });
 

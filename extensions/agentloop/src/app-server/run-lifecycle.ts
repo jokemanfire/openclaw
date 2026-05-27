@@ -15,15 +15,21 @@ import type {
   AgentHarnessV2CleanupParams,
   AgentHarnessAttemptParams,
   AgentHarnessAttemptResult,
+  AgentMessage,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { resolveApiKeyForProvider } from "openclaw/plugin-sdk/provider-auth-runtime";
-import { resolveAgentLoopConfig, type AgentLoopLoopType } from "./config.js";
+import {
+  resolveAgentLoopConfig,
+  type AgentLoopLoopType,
+  type AgentLoopPluginConfig,
+} from "./config.js";
 import type { LoopRegistry } from "./loop-registry.js";
 import { createOcHookBridge, type OcHookBridge } from "./oc-hook-bridge.js";
+import { buildSdkHooks } from "./oc-hook-bridge.js";
 import { readAgentLoopBinding, writeAgentLoopBinding } from "./session-binding.js";
+import { readMappingSessionHistoryMessages } from "./session-history.js";
 import { composeSystemPrompt } from "./system-prompt.js";
 import { buildToolDefinitions, buildToolBridgeHandle, sanitizeToolArgs } from "./tool-bridge.js";
-import { buildSdkHooks } from "./oc-hook-bridge.js";
 
 // ── Internal message types (extractMessages output / buildMessageEvent input) ──
 
@@ -98,13 +104,25 @@ export type AgentLoopSession = {
 
 type PrepareOptions = {
   loopRegistry: LoopRegistry;
-  pluginConfig?: unknown;
+  pluginConfig?: AgentLoopPluginConfig;
 };
 
 type SendOptions = {
   loopRegistry?: LoopRegistry;
-  pluginConfig?: unknown;
+  pluginConfig?: AgentLoopPluginConfig;
 };
+
+async function readSessionHistoryMessages(
+  sessionFile: string,
+): Promise<AgentMessage[] | undefined> {
+  const messages = await readMappingSessionHistoryMessages(sessionFile);
+  if (!messages) {
+    embeddedAgentLog.warn("failed to read mapping session history for harness hooks", {
+      sessionFile,
+    });
+  }
+  return messages;
+}
 
 export async function prepareAgentLoopAttempt(
   params: AgentHarnessAttemptParams,
@@ -280,10 +298,18 @@ export async function sendAgentLoopAttempt(
 
   const ocHookBridge = createOcHookBridge(hookCtx);
 
-  const loopOptions = await buildLoopOptions(session, agentId, appManifest, {
-    extraSystemPrompt: effectiveExtraSystemPrompt,
-    ocHookBridge,
-  });
+  let historyMessages = (await readSessionHistoryMessages(params.sessionFile)) ?? [];
+
+  const loopOptions = await buildLoopOptions(
+    session,
+    agentId,
+    appManifest,
+    {
+      extraSystemPrompt: effectiveExtraSystemPrompt,
+      ocHookBridge,
+    },
+    historyMessages,
+  );
   embeddedAgentLog.debug(`[agentloop] loop.loopOptions=${JSON.stringify(loopOptions)}`);
 
   try {
@@ -618,7 +644,7 @@ function extractUserMsgs(msg: SDKMessage, ccToolMap?: Map<string, string>): OcMe
       toolCallId: blockObject.tool_use_id,
       toolName: ccToolMap?.get(blockObject.tool_use_id) ?? "notFound",
       content: sanitizeToolResult(rawContent) ?? "NotFound",
-      isError: blockObject.isError ?? false,
+      isError: typeof blockObject.isError === "boolean" ? blockObject.isError : false,
       timestamp: Date.now(),
     });
   }
@@ -669,7 +695,7 @@ function extractAssistantMsgs(msg: SDKMessage): OcMessage[] {
         content: [
           {
             type: "toolCall",
-            name: blockObject.name ?? "",
+            name: (blockObject.name as string) ?? "",
             arguments: blockObject.input ? sanitizeToolArgs(blockObject.input) : {},
           },
         ],
@@ -888,6 +914,7 @@ async function buildLoopOptions(
   agentId: string,
   appManifest: import("./loop-registry.js").AppManifest,
   overrides?: { extraSystemPrompt?: string; ocHookBridge?: OcHookBridge },
+  historyMessages?: AgentMessage[],
 ): Promise<Partial<LoopOptions>> {
   const { params } = session;
 
@@ -938,9 +965,7 @@ async function buildLoopOptions(
   }
 
   // Convert OC hook bridge to SDKHooks for DEI path (session-runtime reads options.hooks)
-  const hooks = overrides?.ocHookBridge
-    ? buildSdkHooks(overrides.ocHookBridge)
-    : undefined;
+  const hooks = overrides?.ocHookBridge ? buildSdkHooks(overrides.ocHookBridge) : undefined;
 
   return {
     tools,
@@ -949,6 +974,7 @@ async function buildLoopOptions(
     permissionMode: "default" as const,
     sessionId: `sessionId:${params.sessionId ?? ""}:sessionKey:${params.sessionKey ?? ""}`,
     model: params.modelId,
+    history: transferOCMessagesToCCMessages(historyMessages) ?? [],
     ...(params.model?.api ? { api: String(params.model.api) } : {}),
     ...(resolveProviderUrl(params)
       ? { url: resolveProviderUrl(params) }
@@ -967,6 +993,51 @@ async function buildLoopOptions(
 
     ...(hooks ? { hooks } : {}),
   };
+}
+
+function transferOCMessagesToCCMessages(ocMessages: AgentMessage[] | undefined): SDKMessage[] {
+  const result: SDKMessage[] = [];
+  if (!ocMessages || ocMessages.length === 0) return result;
+
+  let i = 0;
+  while (i < ocMessages.length) {
+    const msg = ocMessages[i]!;
+    const role = msg.role;
+
+    if (role === "user") {
+      // user 文字消息 → CC user
+      result.push({
+        type: "user",
+        message: {
+          role: "user",
+          content: typeof msg.content === "string" ? msg.content : "",
+        },
+        timestamp: typeof msg.timestamp === "number" ? msg.timestamp : Date.now(),
+      } as SDKMessage);
+    }
+    if (role === "assistant") {
+      const blocks: Record<string, unknown>[] = [];
+      if (typeof msg.content === "string") {
+        blocks.push({
+          type: "text",
+          text: msg.content,
+        });
+      }
+      if (blocks.length > 0) {
+        result.push({
+          type: "assistant",
+          message: {
+            role: "assistant",
+            type: "message",
+            content: blocks,
+          },
+          timestamp: typeof msg.timestamp === "number" ? msg.timestamp : Date.now(),
+        } as SDKMessage);
+      }
+    }
+    i++;
+  }
+  return result;
 }
 
 function buildAgentSystemPrompt(
@@ -998,15 +1069,6 @@ function resolveProviderUrl(params: AgentHarnessAttemptParams): string | undefin
   try {
     const providers = (params.config as ConfigWithProviders)?.models?.providers;
     return providers?.[params.provider]?.baseUrl;
-  } catch {
-    return undefined;
-  }
-}
-
-function resolveProviderApiKey(params: AgentHarnessAttemptParams): string | undefined {
-  try {
-    const providers = (params.config as ConfigWithProviders)?.models?.providers;
-    return providers?.[params.provider]?.apiKey;
   } catch {
     return undefined;
   }
