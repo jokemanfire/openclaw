@@ -6,17 +6,17 @@ import type { AgentLoopPluginConfig } from "./config.js";
  * Only tools NOT in this set (OpenClaw-unique tools) get injected.
  */
 export const AGENTLOOP_INTERNAL_TOOL_NAMES: ReadonlySet<string> = new Set([
-//   "read",
-//   "write",
-//   "edit",
-//   "bash",
-//   "glob",
-//   "grep",
-//   "web_search",
-//   "web_fetch",
-//   "todo_write",
-//   "task",
-//   "notebook_edit",
+  "read",
+  "write",
+  "edit",
+  "bash",
+  "glob",
+  "grep",
+  "web_search",
+  "web_fetch",
+  "todo_write",
+  "task",
+  "notebook_edit",
 ]);
 
 export const DEFAULT_TOOL_EXCLUDES: readonly string[] = [...AGENTLOOP_INTERNAL_TOOL_NAMES] as const;

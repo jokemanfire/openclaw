@@ -50,9 +50,26 @@ export function createAgentLoopHarness(options?: AgentLoopHarnessOptions): Agent
   let loopRegistryPromise: Promise<LoopRegistry> | undefined;
   let appsLoadPromise: Promise<void> | undefined;
 
+  const MAX_PARAMS_CACHE_SIZE = 20;
+  const paramsLoopRegistryCache = new Map<string, Promise<LoopRegistry>>();
+
+  function evictParamsCacheLRU(): void {
+    if (paramsLoopRegistryCache.size >= MAX_PARAMS_CACHE_SIZE) {
+      const firstKey = paramsLoopRegistryCache.keys().next().value;
+      if (firstKey !== undefined) {
+        paramsLoopRegistryCache.delete(firstKey);
+      }
+    }
+  }
+
   function getLoopRegistry(params?: AgentHarnessAttemptParams): Promise<LoopRegistry> {
     if (params) {
-      return loadAppManifests(options?.pluginRootDir!, params);
+      const key = params.sessionKey ?? params.sessionId ?? "_";
+      if (!paramsLoopRegistryCache.has(key)) {
+        evictParamsCacheLRU();
+        paramsLoopRegistryCache.set(key, loadAppManifests(options?.pluginRootDir!, params));
+      }
+      return paramsLoopRegistryCache.get(key)!;
     }
     if (!loopRegistryPromise) {
       loopRegistryPromise = loadAppManifests(options?.pluginRootDir!);
@@ -66,13 +83,14 @@ export function createAgentLoopHarness(options?: AgentLoopHarnessOptions): Agent
       return getLoopRegistry(params);
     }
 
+    let capturedRegistry: LoopRegistry;
     appsLoadPromise = (async () => {
-      const registry = await getLoopRegistry(params);
+      capturedRegistry = await getLoopRegistry(params);
       const appLoader = createAppLoader();
-      const apps = registry.listApps();
+      const apps = capturedRegistry.listApps();
       embeddedAgentLog.info(`[agentloop] registry.listApps() apps=${JSON.stringify(apps)}`);
-      for (const appName of registry.listApps()) {
-        const manifest = registry.getApp(appName);
+      for (const appName of capturedRegistry.listApps()) {
+        const manifest = capturedRegistry.getApp(appName);
         if (!manifest) continue;
         await appLoader.loadApp(manifest.sourcePath, appName);
         embeddedAgentLog.info(
@@ -81,12 +99,12 @@ export function createAgentLoopHarness(options?: AgentLoopHarnessOptions): Agent
       }
 
       embeddedAgentLog.info(
-        `[agentloop] all apps loaded apps=${JSON.stringify(registry.listApps())}`,
+        `[agentloop] all apps loaded apps=${JSON.stringify(capturedRegistry.listApps())}`,
       );
     })();
 
     await appsLoadPromise;
-    return getLoopRegistry(params);
+    return capturedRegistry!;
   }
 
   return {
@@ -126,6 +144,29 @@ export function createAgentLoopHarness(options?: AgentLoopHarnessOptions): Agent
 
       try {
         const loopRegistry = await ensureAppsLoaded(params);
+
+        // P0: before_agent_reply — plugins can return synthetic reply, short-circuiting the agent
+        const hookRunner = getGlobalHookRunner();
+        if (hookRunner?.hasHooks("before_agent_reply")) {
+          const beforeReplyResult = await hookRunner.runBeforeAgentReply(
+            { cleanedBody: params.prompt },
+            {
+              agentId: params.agentId ?? "",
+              sessionKey: params.sessionKey,
+              sessionId: params.sessionId,
+              workspaceDir: params.workspaceDir,
+              runId: params.runId,
+              trigger: "user",
+            },
+          );
+          if (beforeReplyResult?.handled) {
+            return {
+              assistantTexts: [beforeReplyResult.reply ?? ""],
+              finishReason: "stop",
+              itemLifecycle: { started: 1, completed: 1, skipped: 0, aborted: 0 },
+            };
+          }
+        }
 
         prepared = await this.prepare(params);
         session = await this.start(prepared);
