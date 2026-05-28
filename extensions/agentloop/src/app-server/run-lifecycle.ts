@@ -929,9 +929,9 @@ async function buildLoopOptions(
     `[agentloop] agent ${agentId} appSystemPrompt: \n${JSON.stringify(appSystemPrompt)}`,
   );
   const composedSystemPrompt = composeSystemPrompt(params, tools, appManifest);
-  embeddedAgentLog.debug(
-    `[agentloop] agent ${agentId} composedSystemPrompt: \n${composedSystemPrompt}`,
-  );
+  // embeddedAgentLog.debug(
+  //   `[agentloop] agent ${agentId} composedSystemPrompt: \n${composedSystemPrompt}`,
+  // );
   const systemPrompt = buildAgentSystemPrompt(
     appSystemPrompt,
     composedSystemPrompt,
