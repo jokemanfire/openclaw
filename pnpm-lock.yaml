@@ -322,9 +322,6 @@ importers:
 
   extensions/agentloop:
     dependencies:
-      '@openclaw/unixsocket-provider':
-        specifier: workspace:*
-        version: link:../unixsocket
       jiti:
         specifier: ^2.6.1
         version: 2.6.1
@@ -336,6 +333,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
     optionalDependencies:
+      '@openclaw/unixsocket-provider':
+        specifier: workspace:*
+        version: link:../unixsocket
       '@zte/agentloop-sdk':
         specifier: file:zte-agentloop-sdk-6.26.20-b4.tgz
         version: file:extensions/agentloop/zte-agentloop-sdk-6.26.20-b4.tgz(commander@14.0.3)(react@19.2.4)
@@ -5400,7 +5400,7 @@ packages:
     bundledDependencies: []
 
   '@zte/esec-shield-daemon@file:extensions/esec-shield-edge/esec-shield-daemon-2026.5.18.tgz':
-    resolution: {integrity: sha512-P6sYKMViyU72BkPYXwLPj8AtY89zkKjpQ6ayc6nEVs41FiZ6JluVNLnKsZKVYhFGBSU9UASIMZS91R8IzI28Ig==, tarball: file:extensions/esec-shield-edge/esec-shield-daemon-2026.5.18.tgz}
+    resolution: {integrity: sha512-5/zJ5KBsiNn1QYzgf1dYpo2vOTXIdS6gk+FxwOmsOFayOhaL3yyRIwsmyufEZHzCyQErCiuDKKRSMozI/BJqLw==, tarball: file:extensions/esec-shield-edge/esec-shield-daemon-2026.5.18.tgz}
     version: 2026.5.18
 
   abbrev@1.1.1:
