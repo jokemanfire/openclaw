@@ -627,7 +627,10 @@ export function createUnixSocketStreamFn(config: ThreadConfig): StreamFn {
         output.stopReason = options?.signal?.aborted ? "aborted" : "error";
         output.errorMessage = errMsg;
 
-        log.warn("unixsocket error", {
+        // Use log.error so the message is always visible regardless of log
+        // level.  The core may wrap this into a cryptic TypeError later, so
+        // the actionable message MUST be logged here.
+        log.error("unixsocket 请求失败", {
           provider: UNIXSOCKET_PROVIDER_ID,
           model: model.id,
           socketPath: config.socketPath,
@@ -640,9 +643,13 @@ export function createUnixSocketStreamFn(config: ThreadConfig): StreamFn {
           stream.push({
             type: "error",
             reason: output.stopReason as never,
-            error: output as never,
+            // Pass a shallow copy — the core may freeze/seal the object,
+            // which would break stream.end(output) below.
+            error: { ...output, content: [...output.content] },
           });
         } catch (pushErr) {
+          // The core may throw TypeError when trying to decorate the output
+          // object.  The real error is already logged above.
           log.warn("unixsocket stream.push error in catch", {
             error: pushErr instanceof Error ? pushErr.message : String(pushErr),
           });

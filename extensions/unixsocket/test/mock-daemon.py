@@ -125,17 +125,27 @@ def handle_error(sock, request, error_code="503"):
     sock.close()
 
 
+import threading
+
+client_counter = 0
+counter_lock = threading.Lock()
+
 def handle_client(sock, mode):
     """Handle a single client connection."""
+    global client_counter
+    with counter_lock:
+        client_counter += 1
+        cid = client_counter
+
     try:
-        print(f"\n[mock-daemon] client connected, mode={mode}")
+        print(f"[mock-daemon #{cid}] connected, mode={mode}")
         frame = read_frame(sock)
         if frame is None:
-            print("[mock-daemon] no frame received, closing")
+            print(f"[mock-daemon #{cid}] no frame received, closing")
             sock.close()
             return
 
-        print(f"[mock-daemon] received request: {json.dumps(frame)[:200]}...")
+        print(f"[mock-daemon #{cid}] request: {json.dumps(frame)[:120]}...")
 
         if mode == "streaming":
             handle_streaming(sock, frame)
@@ -144,11 +154,11 @@ def handle_client(sock, mode):
         elif mode == "error":
             handle_error(sock, frame)
         elif mode == "multi-client":
-            # Accept one request per connection, single response
             handle_streaming(sock, frame)
 
+        print(f"[mock-daemon #{cid}] done")
     except Exception as e:
-        print(f"[mock-daemon] error: {e}")
+        print(f"[mock-daemon #{cid}] error: {e}")
         try:
             sock.close()
         except Exception:
@@ -161,6 +171,8 @@ def main():
     parser.add_argument("--mode", default="streaming",
                         choices=["streaming", "non-streaming", "error", "multi-client"],
                         help="Response mode")
+    parser.add_argument("--concurrent", action="store_true",
+                        help="Handle clients concurrently (thread per connection)")
     args = parser.parse_args()
 
     # Clean up old socket
@@ -169,9 +181,9 @@ def main():
 
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(args.socket)
-    server.listen(5)
+    server.listen(128)
 
-    print(f"[mock-daemon] listening on {args.socket}, mode={args.mode}")
+    print(f"[mock-daemon] listening on {args.socket}, mode={args.mode}, concurrent={args.concurrent}")
 
     def shutdown(signum, frame):
         print(f"\n[mock-daemon] shutting down...")
@@ -184,8 +196,12 @@ def main():
     signal.signal(signal.SIGTERM, shutdown)
 
     while True:
-        client, addr = server.accept()
-        handle_client(client, args.mode)
+        client, _addr = server.accept()
+        if args.concurrent:
+            t = threading.Thread(target=handle_client, args=(client, args.mode), daemon=True)
+            t.start()
+        else:
+            handle_client(client, args.mode)
 
 
 if __name__ == "__main__":
