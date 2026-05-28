@@ -29,49 +29,10 @@ import { readAgentLoopBinding, writeAgentLoopBinding } from "./session-binding.j
 import { readMappingSessionHistoryMessages } from "./session-history.js";
 import { composeSystemPrompt } from "./system-prompt.js";
 import { buildToolDefinitions, buildToolBridgeHandle, sanitizeToolArgs } from "./tool-bridge.js";
+import type { OcMessage, AgentEvent, MessageEventState } from "./types.js";
+import { isUnixSocketProvider, sendUnixSocketStream } from "./unixsocket-stream.js";
 
-// ── Internal message types (extractMessages output / buildMessageEvent input) ──
-
-type OCUsage = {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  totalTokens: number;
-};
-
-type OcAssistantTextMessage = {
-  role: "assistant";
-  content: string;
-  timestamp: number;
-  usage: OCUsage;
-};
-
-type OcAssistantToolCallMessage = {
-  role: "assistant";
-  toolCallId: string;
-  content: Array<{ type: "toolCall"; name: string; arguments: unknown }>;
-  timestamp: number;
-};
-
-type OcToolResultMessage = {
-  role: "toolResult";
-  toolCallId: string;
-  toolName: string;
-  content: unknown;
-  isError?: boolean;
-  timestamp: number;
-};
-
-type OcMessage = OcAssistantTextMessage | OcAssistantToolCallMessage | OcToolResultMessage;
-
-type AgentEvent = {
-  stream: string;
-  data: Record<string, unknown>;
-  text?: string;
-  lastChunk?: string;
-  emittedSnapshot?: string;
-};
+// ── Config helper type for provider lookups ──
 
 type ConfigWithProviders = {
   models?: {
@@ -255,41 +216,12 @@ export async function sendAgentLoopAttempt(
   const loop = createLoopById(agentId, appManifest);
   embeddedAgentLog.info(`[agentloop] loop.run config=${JSON.stringify(appManifest)}`);
 
-  const attemptStartedAt = Date.now();
-  const hookCtx = {
-    runId: params.runId,
+  const toolBridge = await buildToolBridgeHandle({
+    ...params,
     agentId,
-    sessionKey: params.sessionKey,
-    sessionId: params.sessionId,
-    workspaceDir: params.workspaceDir,
-  };
-
-  // Phase 1: tool bridge, prompt resolution, and session history are independent
-  const [toolBridge, promptBuildResult, historyMessages] = await Promise.all([
-    buildToolBridgeHandle({
-      ...params,
-      agentId,
-      signal: session.signal,
-      toolTimeoutMs: session.resolvedConfig.toolTimeoutMs,
-      toolCacheKey: params as object,
-    } as Parameters<typeof buildToolBridgeHandle>[0]),
-    resolveAgentHarnessBeforePromptBuildResult({
-      prompt: params.prompt,
-      developerInstructions: params.extraSystemPrompt ?? "",
-      messages: [],
-      ctx: {
-        runId: params.runId,
-        agentId,
-        sessionKey: params.sessionKey,
-        sessionId: params.sessionId,
-        workspaceDir: params.workspaceDir,
-        modelProviderId: params.provider,
-        modelId: params.modelId,
-      },
-    }),
-    readSessionHistoryMessages(params.sessionFile).then((msgs) => msgs ?? []),
-  ]);
-
+    signal: session.signal,
+    toolTimeoutMs: session.resolvedConfig.toolTimeoutMs,
+  } as Parameters<typeof buildToolBridgeHandle>[0]);
   if (
     toolBridge &&
     "setToolBridge" in loop &&
@@ -301,6 +233,29 @@ export async function sendAgentLoopAttempt(
     embeddedAgentLog.info(`[agentloop] loop.setToolBridge called`);
   }
 
+  const attemptStartedAt = Date.now();
+  const hookCtx = {
+    runId: params.runId,
+    agentId,
+    sessionKey: params.sessionKey,
+    sessionId: params.sessionId,
+    workspaceDir: params.workspaceDir,
+  };
+
+  const promptBuildResult = await resolveAgentHarnessBeforePromptBuildResult({
+    prompt: params.prompt,
+    developerInstructions: params.extraSystemPrompt ?? "",
+    messages: [],
+    ctx: {
+      runId: params.runId,
+      agentId,
+      sessionKey: params.sessionKey,
+      sessionId: params.sessionId,
+      workspaceDir: params.workspaceDir,
+      modelProviderId: params.provider,
+      modelId: params.modelId,
+    },
+  });
   const effectivePrompt = promptBuildResult.prompt;
   const effectiveExtraSystemPrompt = promptBuildResult.developerInstructions;
 
@@ -308,7 +263,8 @@ export async function sendAgentLoopAttempt(
 
   const ocHookBridge = createOcHookBridge(hookCtx);
 
-  // Phase 2: build loop options (depends on prompt resolution and history)
+  let historyMessages = (await readSessionHistoryMessages(params.sessionFile)) ?? [];
+
   const loopOptions = await buildLoopOptions(
     session,
     agentId,
@@ -316,7 +272,6 @@ export async function sendAgentLoopAttempt(
     {
       extraSystemPrompt: effectiveExtraSystemPrompt,
       ocHookBridge,
-      toolCacheKey: params as object,
     },
     historyMessages,
   );
@@ -366,38 +321,77 @@ export async function sendAgentLoopAttempt(
     );
   }
 
-  try {
-    embeddedAgentLog.info(
-      `[agentloop] loop.run starting agentId=${agentId} model=${params.modelId} session: ${params.sessionId} sessionKey: ${params.sessionKey}`,
-    );
-    const result: LoopResult = loop.run(promptInput, loopOptions);
-    for await (const msg of result) {
-      messages.push(msg);
-      embeddedAgentLog.debug(`[agentloop] raw msg =${JSON.stringify(msg)}`);
+  // ── Unix Socket provider: bypass loop.run(), call unixsocket StreamFn directly ──
+  if (isUnixSocketProvider(params)) {
+    try {
+      embeddedAgentLog.info(
+        `[agentloop:unixsocket] starting agentId=${agentId} model=${params.modelId} session=${params.sessionId}`,
+      );
+      const unixTools = await buildToolDefinitions({
+        ...params,
+        agentId,
+        signal: session.signal,
+        toolTimeoutMs: session.resolvedConfig.toolTimeoutMs,
+      } as Parameters<typeof buildToolDefinitions>[0]);
+      const composedSystemPrompt = composeSystemPrompt(params, unixTools, appManifest);
+      const systemPrompt = buildAgentSystemPrompt(
+        appManifest?.loop_mode?.find((l) => l.id === agentId)?.systemPrompt,
+        composedSystemPrompt,
+        effectiveExtraSystemPrompt ?? params.extraSystemPrompt,
+      );
+      const unixResult = await sendUnixSocketStream(
+        params,
+        effectivePrompt,
+        systemPrompt,
+        { pushAgentEvent },
+        session.signal,
+        unixTools,
+      );
+      messages = unixResult.messages;
+      assistantTexts = unixResult.assistantTexts;
+    } catch (error) {
+      success = false;
+      embeddedAgentLog.warn(
+        `[agentloop:unixsocket] failed agentId=${agentId} error=${String(error)}`,
+      );
+    }
+  } else {
+    // ── Standard path: loop.run() via agentloop-sdk ──
+    try {
+      embeddedAgentLog.info(
+        `[agentloop] loop.run starting agentId=${agentId} model=${params.modelId} session: ${params.sessionId} sessionKey: ${params.sessionKey}`,
+      );
+      const result: LoopResult = loop.run(promptInput, loopOptions);
+      for await (const msg of result) {
+        messages.push(msg);
+        embeddedAgentLog.debug(`[agentloop] raw msg =${JSON.stringify(msg)}`);
 
-      const ccToolMap = extractToolMap(messages);
-      const ocMessages = extractMessages(msg, ccToolMap);
-      totalOcMessages.push(...ocMessages);
+        const ccToolMap = extractToolMap(messages);
+        const ocMessages = extractMessages(msg, ccToolMap);
+        totalOcMessages.push(...ocMessages);
 
-      for (const ocMsg of ocMessages) {
-        const events = buildMessageEvent(ocMsg, { lastChunk, emittedSnapshot });
-        if (!events) continue;
-        for (const event of events) {
-          if (event.stream === "assistant") {
-            lastChunk = event.lastChunk ?? "";
-            emittedSnapshot = event.emittedSnapshot ?? "";
-            assistantTexts.push(event.text ?? "");
-          } else {
-            lastChunk = "";
-            emittedSnapshot = "";
+        for (const ocMsg of ocMessages) {
+          const events = buildMessageEvent(ocMsg, { lastChunk, emittedSnapshot });
+          if (!events) continue;
+          for (const event of events) {
+            if (event.stream === "assistant") {
+              lastChunk = event.lastChunk ?? "";
+              emittedSnapshot = event.emittedSnapshot ?? "";
+              assistantTexts.push(event.text ?? "");
+            } else {
+              lastChunk = "";
+              emittedSnapshot = "";
+            }
+            pushAgentEvent(event.stream, event.data);
           }
-          pushAgentEvent(event.stream, event.data);
         }
       }
+    } catch (error) {
+      success = false;
+      embeddedAgentLog.warn(
+        `[agentloop] loop.run failed agentId=${agentId} error=${String(error)}`,
+      );
     }
-  } catch (error) {
-    success = false;
-    embeddedAgentLog.warn(`[agentloop] loop.run failed agentId=${agentId} error=${String(error)}`);
   }
 
   try {
@@ -692,28 +686,10 @@ function extractAssistantMsgs(msg: SDKMessage): OcMessage[] {
     const blockObject = block as Record<string, unknown>;
     const type = blockObject.type;
     if (type === "text" && typeof blockObject.text === "string") {
-      const usageForSdk = msg.usage ?? {};
-      const inputForSdk =
-        typeof usageForSdk.input_tokens === "number" ? usageForSdk.input_tokens : 0;
-      const outputForSdk =
-        typeof usageForSdk.output_tokens === "number" ? usageForSdk.output_tokens : 0;
       result.push({
         role: "assistant",
         content: stripThinkTags(blockObject.text),
         timestamp: Date.now(),
-        usage: {
-          input: inputForSdk,
-          output: outputForSdk,
-          cacheRead:
-            typeof usageForSdk.cache_read_input_tokens === "number"
-              ? usageForSdk.cache_read_input_tokens
-              : 0,
-          cacheWrite:
-            typeof usageForSdk.cache_creation_input_tokens === "number"
-              ? usageForSdk.cache_creation_input_tokens
-              : 0,
-          totalTokens: inputForSdk + outputForSdk,
-        },
       });
     }
     if (type === "tool_use" && typeof blockObject.id === "string") {
@@ -734,7 +710,6 @@ function extractAssistantMsgs(msg: SDKMessage): OcMessage[] {
   return result;
 }
 
-type MessageEventState = { lastChunk: string; emittedSnapshot: string };
 type MessageEvent = {
   text: string;
   data: Record<string, unknown>;
@@ -941,7 +916,7 @@ async function buildLoopOptions(
   session: AgentLoopSession,
   agentId: string,
   appManifest: import("./loop-registry.js").AppManifest,
-  overrides?: { extraSystemPrompt?: string; ocHookBridge?: OcHookBridge; toolCacheKey?: object },
+  overrides?: { extraSystemPrompt?: string; ocHookBridge?: OcHookBridge },
   historyMessages?: AgentMessage[],
 ): Promise<Partial<LoopOptions>> {
   const { params } = session;
@@ -950,7 +925,6 @@ async function buildLoopOptions(
     ...params,
     agentId,
     toolTimeoutMs: session.resolvedConfig.toolTimeoutMs,
-    ...(overrides?.toolCacheKey ? { toolCacheKey: overrides.toolCacheKey } : {}),
   } as Parameters<typeof buildToolDefinitions>[0]);
 
   embeddedAgentLog.info(
@@ -961,9 +935,9 @@ async function buildLoopOptions(
     `[agentloop] agent ${agentId} appSystemPrompt: \n${JSON.stringify(appSystemPrompt)}`,
   );
   const composedSystemPrompt = composeSystemPrompt(params, tools, appManifest);
-  // embeddedAgentLog.debug(
-  //   `[agentloop] agent ${agentId} composedSystemPrompt: \n${composedSystemPrompt}`,
-  // );
+  embeddedAgentLog.debug(
+    `[agentloop] agent ${agentId} composedSystemPrompt: \n${composedSystemPrompt}`,
+  );
   const systemPrompt = buildAgentSystemPrompt(
     appSystemPrompt,
     composedSystemPrompt,

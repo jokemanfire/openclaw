@@ -7,6 +7,9 @@
  * pipeline can consume.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { SDKMessage } from "@zte/agentloop-sdk/sdk";
 import type {
   AgentHarnessAttemptParams,
@@ -38,11 +41,58 @@ type ConfigWithProviders = {
           connectTimeoutMs?: number;
           readTimeoutMs?: number;
           maxRetries?: number;
+          contextWindow?: number;
+          maxTokens?: number;
         };
       }
     >;
   };
 };
+
+// ── Resolve unixsocket-provider api path ──
+
+function resolveUnixsocketApiPath(): string {
+  const thisDir = path.dirname(fileURLToPath(import.meta.url));
+
+  const candidates = [
+    // harness chunk at dist/harness-<hash>.js → dist/extensions/unixsocket/api.js
+    path.resolve(thisDir, "extensions", "unixsocket", "api.js"),
+    // harness entry at dist/extensions/agentloop/harness.js
+    path.resolve(thisDir, "..", "..", "extensions", "unixsocket", "api.js"),
+    // dist-runtime fallback
+    path.resolve(thisDir, "..", "dist-runtime", "extensions", "unixsocket", "api.js"),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      fs.accessSync(candidate);
+      return candidate;
+    } catch {}
+  }
+
+  throw new Error(
+    `[agentloop:unixsocket] Cannot locate unixsocket api.js. Searched: ${candidates.join(", ")}`,
+  );
+}
+
+// ── Tool conversion (UnifiedTool → pi-ai Tool format) ──
+
+type ToolLike = {
+  name: string;
+  description: string;
+  parameters?: Record<string, unknown>;
+  inputSchema?: unknown;
+};
+
+function toPiAiTools(
+  tools: ToolLike[],
+): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
+  return tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters ?? (t.inputSchema as Record<string, unknown>) ?? {},
+  }));
+}
 
 // ── Provider detection ──
 
@@ -60,8 +110,11 @@ function resolveSocketConfig(params: AgentHarnessAttemptParams) {
     connectTimeoutMs: p?.connectTimeoutMs ?? UNIXSOCKET_DEFAULT_CONNECT_TIMEOUT_MS,
     readTimeoutMs: p?.readTimeoutMs ?? UNIXSOCKET_DEFAULT_READ_TIMEOUT_MS,
     maxRetries: p?.maxRetries ?? UNIXSOCKET_DEFAULT_MAX_RETRIES,
-    contextWindow: UNIXSOCKET_DEFAULT_CONTEXT_WINDOW,
-    maxTokens: UNIXSOCKET_DEFAULT_MAX_TOKENS,
+    contextWindow:
+      ((p as Record<string, unknown>)?.contextWindow as number) ??
+      UNIXSOCKET_DEFAULT_CONTEXT_WINDOW,
+    maxTokens:
+      ((p as Record<string, unknown>)?.maxTokens as number) ?? UNIXSOCKET_DEFAULT_MAX_TOKENS,
   };
 }
 
@@ -128,16 +181,25 @@ export async function sendUnixSocketStream(
   systemPrompt: string | undefined,
   callbacks: UnixSocketStreamCallbacks,
   signal?: AbortSignal,
+  tools?: ToolLike[],
 ): Promise<{ messages: SDKMessage[]; assistantTexts: string[] }> {
   const { pushAgentEvent } = callbacks;
   const socketConfig = resolveSocketConfig(params);
 
   embeddedAgentLog.info(
-    `[agentloop:unixsocket] starting stream socketPath=${socketConfig.socketPath} model=${params.modelId}`,
+    `[agentloop:unixsocket] starting stream socketPath=${socketConfig.socketPath} model=${params.modelId} tools=${tools?.length ?? 0}`,
+  );
+  embeddedAgentLog.debug(
+    `[agentloop:unixsocket] params: provider=${params.provider} modelId=${params.modelId} sessionId=${params.sessionId} sessionKey=${params.sessionKey}`,
   );
 
-  // Dynamic import to respect extension boundaries
-  const { createUnixSocketStreamFn } = await import("@openclaw/unixsocket-provider/api.js");
+  // Resolve unixsocket-provider api via dist path (tsdown bundles agentloop harness,
+  // so bare package specifiers like @openclaw/unixsocket-provider/api.js are not resolvable).
+  // Walk up from this file's compiled location to find dist/extensions/unixsocket/api.js.
+  const { createUnixSocketStreamFn } = await import(
+    /* @vite-ignore */
+    resolveUnixsocketApiPath()
+  );
 
   const streamFn = createUnixSocketStreamFn({
     socketPath: socketConfig.socketPath,
@@ -159,7 +221,8 @@ export async function sendUnixSocketStream(
     maxTokens: socketConfig.maxTokens,
   };
 
-  // Build Context from prompt + systemPrompt
+  // Build Context from prompt + systemPrompt + tools
+  const piAiTools = tools && tools.length > 0 ? toPiAiTools(tools) : undefined;
   const context = {
     messages: [
       {
@@ -169,7 +232,23 @@ export async function sendUnixSocketStream(
       },
     ],
     ...(systemPrompt ? { systemPrompt } : {}),
+    ...(piAiTools ? { tools: piAiTools } : {}),
   };
+
+  embeddedAgentLog.debug(
+    `[agentloop:unixsocket] request context: systemPromptLen=${systemPrompt?.length ?? 0} messages=1 tools=${piAiTools?.length ?? 0} toolNames=[${piAiTools?.map((t) => t.name).join(",") ?? ""}]`,
+  );
+  embeddedAgentLog.debug(
+    `[agentloop:unixsocket] systemPrompt preview: ${systemPrompt?.slice(0, 500) ?? "(none)"}`,
+  );
+  embeddedAgentLog.debug(`[agentloop:unixsocket] user prompt: ${prompt.slice(0, 200)}`);
+  if (piAiTools) {
+    for (const tool of piAiTools) {
+      embeddedAgentLog.debug(
+        `[agentloop:unixsocket] tool: name=${tool.name} desc=${tool.description?.slice(0, 80) ?? ""} paramsKeys=[${Object.keys(tool.parameters ?? {}).join(",")}]`,
+      );
+    }
+  }
 
   const options = {
     ...(signal ? { signal } : {}),
@@ -195,6 +274,7 @@ export async function sendUnixSocketStream(
       if (eventType === "text_delta") {
         const delta = (event as Record<string, unknown>).delta as string;
         if (!delta) continue;
+        embeddedAgentLog.debug(`[agentloop:unixsocket] text_delta: delta="${delta.slice(0, 200)}"`);
 
         const sdkMsg = makeTextSDKMessage(delta);
         messages.push(sdkMsg);
@@ -215,7 +295,13 @@ export async function sendUnixSocketStream(
 
       if (eventType === "done") {
         const reason = (event as Record<string, unknown>).reason as string;
-        embeddedAgentLog.info(`[agentloop:unixsocket] stream done reason=${reason}`);
+        const usage = (event as Record<string, unknown>).usage;
+        embeddedAgentLog.info(
+          `[agentloop:unixsocket] stream done reason=${reason} usage=${JSON.stringify(usage)}`,
+        );
+        embeddedAgentLog.debug(
+          `[agentloop:unixsocket] done event full: ${JSON.stringify(event).slice(0, 500)}`,
+        );
       }
 
       if (eventType === "error") {
@@ -225,9 +311,12 @@ export async function sendUnixSocketStream(
             ? errorObj
             : errorObj instanceof Error
               ? errorObj.message
-              : String(errorObj ?? "Unknown unixsocket error");
+              : JSON.stringify(errorObj ?? "Unknown unixsocket error");
 
         embeddedAgentLog.warn(`[agentloop:unixsocket] stream error: ${errorText}`);
+        embeddedAgentLog.debug(
+          `[agentloop:unixsocket] error event full: ${JSON.stringify(event).slice(0, 1000)}`,
+        );
         const sdkMsg = makeTextSDKMessage(errorText);
         messages.push(sdkMsg);
 
@@ -250,6 +339,11 @@ export async function sendUnixSocketStream(
   embeddedAgentLog.info(
     `[agentloop:unixsocket] stream completed messages=${messages.length} texts=${assistantTexts.length}`,
   );
+  if (assistantTexts.length > 0) {
+    embeddedAgentLog.debug(
+      `[agentloop:unixsocket] assistant text preview: "${assistantTexts.join("").slice(0, 300)}"`,
+    );
+  }
 
   return { messages, assistantTexts };
 }
