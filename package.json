@@ -1763,8 +1763,6 @@
     "vitest": "^4.1.5"
   },
   "optionalDependencies": {
-    "@zte/agentloop-sdk": "file:extensions/agentloop/zte-agentloop-sdk-6.26.20-b4.tgz",
-    "@zte/esec-shield-daemon": "file:extensions/esec-shield-edge/esec-shield-daemon-2026.5.18.tgz",
     "sqlite-vec": "0.1.9"
   },
   "overrides": {

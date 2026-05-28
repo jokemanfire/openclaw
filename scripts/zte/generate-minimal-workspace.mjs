@@ -11,6 +11,8 @@
 // To restore the full workspace:
 //   git checkout pnpm-workspace.yaml
 
+import { execSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,8 +24,126 @@ const extensionsRoot = path.join(repoRoot, "extensions");
 const workspacePath = path.join(repoRoot, "pnpm-workspace.yaml");
 const backupPath = path.join(repoRoot, "pnpm-workspace.yaml.full.bak");
 
+// ── Vendor tgz sync from openclaw-recipes ───────────────────────────
+
+const RECIPES_BRANCH = "refs/heads/dev-enhance";
+const VENDOR_DIR = path.join(repoRoot, "packages", "zte-vendor");
+
+const VENDOR_FILES = ["zte-agentloop-sdk-6.26.20-b4.tgz", "esec-shield-daemon-2026.5.18.tgz"];
+
 const INCLUDE_ENV = "OPENCLAW_BUNDLED_PLUGINS";
 const EXCLUDE_ENV = "OPENCLAW_EXCLUDE_BUNDLED_PLUGINS";
+
+function sha256File(filePath) {
+  const hash = crypto.createHash("sha256");
+  hash.update(fs.readFileSync(filePath));
+  return hash.digest("hex");
+}
+
+function resolveRecipesRepoUrl() {
+  // 1. Full URL env var: OPENCLAW_RECIPES_REPO
+  const repoEnv = process.env.OPENCLAW_RECIPES_REPO?.trim();
+  if (repoEnv) return repoEnv;
+
+  // 2. Gerrit username from env vars
+  let gerritUser =
+    process.env.OPENCLAW_RECIPES_GERRIT_USER?.trim() || process.env.GERRIT_USER?.trim();
+
+  // 3. Auto-detect from git config url.* lines (e.g. url.ssh://USER@gerrit.zte.com.cn.*)
+  if (!gerritUser) {
+    try {
+      const raw = execSync("git config -l", {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 5000,
+      });
+      const m = raw.match(/url\.\S+?\/\/([^@]+)@gerrit\.zte\.com\.cn/);
+      if (m) gerritUser = m[1];
+    } catch {
+      // git config -l not available
+    }
+  }
+
+  // 4. Fallback: git config gerrit.username
+  if (!gerritUser) {
+    try {
+      const cfg = execSync("git config --get gerrit.username", {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 3000,
+      }).trim();
+      if (cfg) gerritUser = cfg;
+    } catch {
+      // gerrit.username not configured
+    }
+  }
+
+  if (gerritUser) {
+    const host = process.env.OPENCLAW_RECIPES_GERRIT_HOST?.trim() || "gerrit.zte.com.cn";
+    return `ssh://${gerritUser}@${host}:29418/AIOS/openclaw-recipes`;
+  }
+
+  return null;
+}
+
+function syncRecipesVendor() {
+  const recipesUrl = resolveRecipesRepoUrl();
+  if (!recipesUrl) {
+    console.warn("[vendor] Could not determine openclaw-recipes repo URL.");
+    console.warn("[vendor] Set OPENCLAW_RECIPES_REPO or OPENCLAW_RECIPES_GERRIT_USER env var.");
+    console.warn("[vendor] Skipping vendor sync. Existing vendor files will be used if present.");
+    return;
+  }
+
+  console.log(`[vendor] Syncing from ${recipesUrl} (branch: ${RECIPES_BRANCH})`);
+
+  fs.mkdirSync(VENDOR_DIR, { recursive: true });
+
+  let updated = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const file of VENDOR_FILES) {
+    const dstPath = path.join(VENDOR_DIR, file);
+
+    try {
+      const remoteBytes = execSync(
+        `git archive --remote="${recipesUrl}" ${RECIPES_BRANCH} "${file}" | tar -xO`,
+        {
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: 60000,
+          maxBuffer: 100 * 1024 * 1024,
+        },
+      );
+
+      const remoteHash = crypto.createHash("sha256").update(remoteBytes).digest("hex");
+
+      if (fs.existsSync(dstPath)) {
+        if (remoteHash === sha256File(dstPath)) {
+          skipped++;
+          continue;
+        }
+      }
+
+      fs.writeFileSync(dstPath, remoteBytes);
+      updated++;
+      console.log(`[vendor] Updated: ${file} (sha256: ${remoteHash.substring(0, 16)}…)`);
+    } catch (err) {
+      failed++;
+      const detail = err.stderr
+        ? String(err.stderr).trim().slice(0, 300)
+        : String(err.message).slice(0, 300);
+      console.warn(`[vendor] Failed to fetch ${file}: ${detail}`);
+    }
+  }
+
+  if (updated === 0 && skipped === VENDOR_FILES.length) {
+    console.log(`[vendor] All ${skipped} vendor files up to date (sha256 matched).`);
+  } else if (failed > 0) {
+    console.warn(`[vendor] ${updated} updated, ${skipped} skipped, ${failed} failed.`);
+    console.warn("[vendor] Existing vendor files will be used if present.");
+  }
+}
 
 function parseEnvList(raw) {
   if (typeof raw !== "string" || raw.trim().length === 0) return null;
@@ -124,6 +244,9 @@ function generateWorkspaceYaml(includedPlugins) {
 }
 
 function main() {
+  // Step 0: Sync vendor tgz files from openclaw-recipes (non-fatal)
+  syncRecipesVendor();
+
   const includedPlugins = resolveIncludedPlugins();
 
   if (includedPlugins.length === 0) {

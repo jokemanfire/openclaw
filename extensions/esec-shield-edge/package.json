@@ -6,8 +6,7 @@
     "index.js",
     "openclaw.plugin.json",
     "src/",
-    "dist",
-    "esec-shield-daemon-*.tgz"
+    "dist"
   ],
   "type": "module",
   "main": "index.ts",
@@ -21,12 +20,11 @@
     "buildpack:daemon": "pnpm build:daemon && pnpm pack:daemon",
     "pack:daemon": "node scripts/pack-daemon.mjs"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@zte/esec-shield-daemon": "file:../../packages/zte-vendor/esec-shield-daemon-2026.5.18.tgz"
+  },
   "devDependencies": {
     "@openclaw/plugin-sdk": "workspace:*"
-  },
-  "optionalDependencies": {
-    "@zte/esec-shield-daemon": "file:esec-shield-daemon-2026.5.18.tgz"
   },
   "openclaw": {
     "extensions": [
