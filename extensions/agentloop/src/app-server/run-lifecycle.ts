@@ -32,10 +32,19 @@ import { buildToolDefinitions, buildToolBridgeHandle, sanitizeToolArgs } from ".
 
 // ── Internal message types (extractMessages output / buildMessageEvent input) ──
 
+type OCUsage = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+};
+
 type OcAssistantTextMessage = {
   role: "assistant";
   content: string;
   timestamp: number;
+  usage: OCUsage;
 };
 
 type OcAssistantToolCallMessage = {
@@ -683,10 +692,28 @@ function extractAssistantMsgs(msg: SDKMessage): OcMessage[] {
     const blockObject = block as Record<string, unknown>;
     const type = blockObject.type;
     if (type === "text" && typeof blockObject.text === "string") {
+      const usageForSdk = msg.usage ?? {};
+      const inputForSdk =
+        typeof usageForSdk.input_tokens === "number" ? usageForSdk.input_tokens : 0;
+      const outputForSdk =
+        typeof usageForSdk.output_tokens === "number" ? usageForSdk.output_tokens : 0;
       result.push({
         role: "assistant",
         content: stripThinkTags(blockObject.text),
         timestamp: Date.now(),
+        usage: {
+          input: inputForSdk,
+          output: outputForSdk,
+          cacheRead:
+            typeof usageForSdk.cache_read_input_tokens === "number"
+              ? usageForSdk.cache_read_input_tokens
+              : 0,
+          cacheWrite:
+            typeof usageForSdk.cache_creation_input_tokens === "number"
+              ? usageForSdk.cache_creation_input_tokens
+              : 0,
+          totalTokens: inputForSdk + outputForSdk,
+        },
       });
     }
     if (type === "tool_use" && typeof blockObject.id === "string") {
