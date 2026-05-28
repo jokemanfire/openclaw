@@ -1,10 +1,11 @@
-import path from "node:path";
-import os from "node:os";
-import fs from "node:fs";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
 import type { PluginLogger } from "openclaw/plugin-sdk/core";
-import type { HookName } from "./rpc-protocol.js";
 import { RpcMux, JsonRpc } from "./daemon-rpc.js";
+import type { HookName } from "./rpc-protocol.js";
 class DaemonError extends Error {
   constructor(message: string, opts?: { cause?: Error }) {
     super(message, opts);
@@ -26,17 +27,31 @@ const PLATFORM_MAP: Record<string, string> = { linux: "linux", darwin: "darwin",
 const ARCH_MAP: Record<string, string> = { x64: "x64", arm64: "arm64" };
 
 function resolveDaemonPath(pluginRoot: string): string {
+  let daemonDir = "";
+  try {
+    const require = createRequire(import.meta.url);
+    const pkgJsonPath = require.resolve("@zte/esec-shield-daemon/package.json");
+    daemonDir = path.dirname(pkgJsonPath);
+  } catch {
+    daemonDir = pluginRoot;
+  }
+
   const platform = PLATFORM_MAP[os.platform()] ?? "linux";
   const arch = ARCH_MAP[os.arch()] ?? "x64";
   const ext = os.platform() === "win32" ? ".exe" : "";
-  const version = detectLatestVersion(pluginRoot) ?? DEFAULT_DAEMON_VERSION;
-  return path.join(pluginRoot, "bin", `esec-shield-daemon-edge-v${version}-${platform}-${arch}${ext}`);
+  const version = detectLatestVersion(daemonDir) ?? DEFAULT_DAEMON_VERSION;
+  return path.join(
+    daemonDir,
+    "bin",
+    `esec-shield-daemon-edge-v${version}-${platform}-${arch}${ext}`,
+  );
 }
 
 function detectLatestVersion(pluginRoot: string): string | undefined {
   const binDir = path.join(pluginRoot, "bin");
   if (!fs.existsSync(binDir)) return undefined;
-  const versions = fs.readdirSync(binDir)
+  const versions = fs
+    .readdirSync(binDir)
     .map((f) => f.match(/daemon-edge-v(\d+\.\d+\.\d+)/)?.[1])
     .filter(Boolean) as string[];
   if (versions.length === 0) return undefined;
@@ -74,7 +89,7 @@ class DaemonProcess {
     logger: PluginLogger,
     mux: RpcMux,
     handshakeTimeoutMs: number,
-    callbacks: ProcessCallbacks
+    callbacks: ProcessCallbacks,
   ) {
     this.exitPromise = new Promise<void>((resolve) => {
       this.exitResolve = resolve;
@@ -185,10 +200,7 @@ export class DaemonManager {
     this.pluginConfig = opts.pluginConfig;
     this.handshakeTimeoutMs = opts.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
     this.hookTimeoutMs = opts.hookTimeoutMs ?? DEFAULT_HOOK_TIMEOUT_MS;
-    this.restartScheduler = new RestartScheduler(
-      RESTART_WINDOW_MS,
-      MAX_RESTARTS_IN_WINDOW
-    );
+    this.restartScheduler = new RestartScheduler(RESTART_WINDOW_MS, MAX_RESTARTS_IN_WINDOW);
   }
 
   start(): void {
@@ -200,7 +212,9 @@ export class DaemonManager {
     if (this.process) {
       this.logger.warn?.(`[esec-shield-edge] killing old process pid=${this.process.pid}`);
       this.process.kill().catch((err) => {
-        this.logger.error?.(`[esec-shield-edge] kill failed: ${err instanceof Error ? err.message : String(err)}`);
+        this.logger.error?.(
+          `[esec-shield-edge] kill failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       });
     }
 
@@ -218,18 +232,24 @@ export class DaemonManager {
       this.handshakeTimeoutMs,
       {
         onTimeout: () => {
-          this.logger.warn?.(`[esec-shield-edge] handshake timeout pid=${this.process?.pid} after ${this.handshakeTimeoutMs}ms`);
+          this.logger.warn?.(
+            `[esec-shield-edge] handshake timeout pid=${this.process?.pid} after ${this.handshakeTimeoutMs}ms`,
+          );
           this.scheduleRestart();
         },
         onError: (err) => {
-          this.logger.warn?.(`[esec-shield-edge] process error pid=${this.process?.pid}: ${err instanceof Error ? err.message : String(err)}`);
+          this.logger.warn?.(
+            `[esec-shield-edge] process error pid=${this.process?.pid}: ${err instanceof Error ? err.message : String(err)}`,
+          );
           this.scheduleRestart();
         },
         onExit: (code, signal) => {
-          this.logger.warn?.(`[esec-shield-edge] crashed pid=${this.process?.pid} (${signal ?? `code ${code}`})`);
+          this.logger.warn?.(
+            `[esec-shield-edge] crashed pid=${this.process?.pid} (${signal ?? `code ${code}`})`,
+          );
           this.scheduleRestart();
         },
-      }
+      },
     );
 
     this.logger.info?.(`[esec-shield-edge] spawned pid=${this.process.pid}`);
@@ -245,7 +265,9 @@ export class DaemonManager {
     if (this.process) {
       this.logger.info?.(`[esec-shield-edge] killing process pid=${pid}`);
       this.process.kill().catch((err) => {
-        this.logger.error?.(`[esec-shield-edge] kill failed: ${err instanceof Error ? err.message : String(err)}`);
+        this.logger.error?.(
+          `[esec-shield-edge] kill failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       });
     }
     this.process = null;
@@ -257,7 +279,9 @@ export class DaemonManager {
         try {
           this.spawn();
         } catch (err) {
-          this.logger.error?.(`[esec-shield-edge] spawn failed: ${err instanceof Error ? err.message : String(err)}`);
+          this.logger.error?.(
+            `[esec-shield-edge] spawn failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
           this.scheduleRestart();
         }
       }
@@ -265,7 +289,7 @@ export class DaemonManager {
 
     if (result.scheduled) {
       this.logger.warn?.(
-        `[esec-shield-edge] restart attempt ${result.count}/${MAX_RESTARTS_IN_WINDOW} in ${result.delayMs}ms (prev pid=${pid})`
+        `[esec-shield-edge] restart attempt ${result.count}/${MAX_RESTARTS_IN_WINDOW} in ${result.delayMs}ms (prev pid=${pid})`,
       );
     } else {
       this.logger.error?.(`[esec-shield-edge] ${result.reason}`);
@@ -303,11 +327,7 @@ export class DaemonManager {
     return { accepted: true, version: p.version ?? DEFAULT_DAEMON_VERSION };
   }
 
-  async request(
-    method: string,
-    params: unknown,
-    opts?: { timeoutMs?: number }
-  ): Promise<unknown> {
+  async request(method: string, params: unknown, opts?: { timeoutMs?: number }): Promise<unknown> {
     const process = this.process;
     if (!process || process.state !== "ready") {
       throw new DaemonError("not ready");
