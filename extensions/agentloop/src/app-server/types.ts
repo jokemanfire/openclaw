@@ -5,17 +5,40 @@
 
 // ── Internal message types (extractMessages output / buildMessageEvent input) ──
 
+export type OCUsage = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+};
+
 export type OcAssistantTextMessage = {
   role: "assistant";
   content: string;
   timestamp: number;
+  usage?: OCUsage;
 };
+
+export type OcAssitantToolCallItem = {
+  type: "toolCall";
+  id: string;
+  name: string;
+  arguments: unknown;
+};
+
+export type OcAssistantTextItem = {
+  type: "text";
+  text: string;
+};
+
+export type OcAssistantItem = OcAssistantTextItem | OcAssitantToolCallItem;
 
 export type OcAssistantToolCallMessage = {
   role: "assistant";
-  toolCallId: string;
-  content: Array<{ type: "toolCall"; name: string; arguments: unknown }>;
+  content: OcAssistantItem[];
   timestamp: number;
+  usage?: OCUsage;
 };
 
 export type OcToolResultMessage = {

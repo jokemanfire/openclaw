@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { SDKMessage, PromptInput, LoopResult, ToolBridgeHandle } from "@zte/agentloop-sdk/sdk";
 import type { LoopOptions } from "@zte/agentloop-sdk/sdk";
+import { sdkLog } from "@zte/agentloop-sdk/sdk";
 import {
   embeddedAgentLog,
   emitAgentEvent,
@@ -29,7 +30,15 @@ import { readAgentLoopBinding, writeAgentLoopBinding } from "./session-binding.j
 import { readMappingSessionHistoryMessages } from "./session-history.js";
 import { composeSystemPrompt } from "./system-prompt.js";
 import { buildToolDefinitions, buildToolBridgeHandle, sanitizeToolArgs } from "./tool-bridge.js";
-import type { OcMessage, AgentEvent, MessageEventState } from "./types.js";
+import type {
+  OcMessage,
+  AgentEvent,
+  MessageEventState,
+  OcAssistantTextItem,
+  OcAssitantToolCallItem,
+  OCUsage,
+  OcAssistantTextMessage,
+} from "./types.js";
 import { isUnixSocketProvider, sendUnixSocketStream } from "./unixsocket-stream.js";
 
 // ── Config helper type for provider lookups ──
@@ -534,6 +543,7 @@ function extractToolMap(messages: SDKMessage[]): Map<string, string> {
 }
 
 function extractMessages(msg: SDKMessage, ccToolMap?: Map<string, string>): OcMessage[] {
+  recordUsage(msg);
   const messages: OcMessage[] = [];
   const assistantMsgs = extractAssistantMsgs(msg);
   messages.push(...assistantMsgs);
@@ -679,35 +689,73 @@ function extractAssistantMsgs(msg: SDKMessage): OcMessage[] {
   if (contentBlocks.length == 0) {
     return result;
   }
+  const textContent: OcAssistantTextItem[] = [];
+  const toolUseContent: OcAssitantToolCallItem[] = [];
   for (const block of contentBlocks) {
     if (!block || typeof block !== "object") {
       continue;
     }
     const blockObject = block as Record<string, unknown>;
     const type = blockObject.type;
-    if (type === "text" && typeof blockObject.text === "string") {
-      result.push({
-        role: "assistant",
-        content: stripThinkTags(blockObject.text),
-        timestamp: Date.now(),
+    if (type === "tool_use" && typeof blockObject.id === "string") {
+      toolUseContent.push({
+        type: "toolCall",
+        id: blockObject.id,
+        name: (blockObject.name as string) ?? "",
+        arguments: blockObject.input ? sanitizeToolArgs(blockObject.input) : {},
       });
     }
-    if (type === "tool_use" && typeof blockObject.id === "string") {
-      result.push({
-        role: "assistant",
-        toolCallId: blockObject.id,
-        content: [
-          {
-            type: "toolCall",
-            name: (blockObject.name as string) ?? "",
-            arguments: blockObject.input ? sanitizeToolArgs(blockObject.input) : {},
-          },
-        ],
-        timestamp: Date.now(),
+    if (type === "text" && typeof blockObject.text === "string" && blockObject.text.length > 0) {
+      textContent.push({
+        type: "text",
+        text: stripThinkTags(blockObject.text),
       });
     }
   }
+  if (toolUseContent.length > 0 || textContent.length > 0) {
+    result.push({
+      role: "assistant",
+      content: [...textContent, ...toolUseContent],
+      timestamp: Date.now(),
+      usage: extractUsage(msg),
+    });
+  }
   return result;
+}
+
+function extractUsage(msg: SDKMessage): OCUsage {
+  const usageForSdk = msg.message?.usage ?? {};
+  return extractUsageInternal(usageForSdk);
+}
+
+function extractUsageInternal(usageForSdk: Record<string, unknown>): OCUsage {
+  const inputForSdk = toNumber(usageForSdk.input_tokens);
+  const outputForSdk = toNumber(usageForSdk.output_tokens);
+  return {
+    input: inputForSdk,
+    output: outputForSdk,
+    cacheRead: toNumber(usageForSdk.cache_read_input_tokens),
+    cacheWrite: toNumber(usageForSdk.cache_creation_input_tokens),
+    totalTokens: inputForSdk + outputForSdk,
+  };
+}
+
+function recordUsage(msg: SDKMessage): void {
+  let ocUsage = extractUsage(msg);
+  if (ocUsage.totalTokens !== 0) {
+    sdkLog.info(`[harnness][OCUsage]${JSON.stringify(ocUsage)}`);
+    return;
+  }
+  if (msg.usage) {
+    ocUsage = extractUsageInternal(msg.usage);
+    if (ocUsage.totalTokens !== 0) {
+      sdkLog.info(`[harnness][OCUsage][Result]${JSON.stringify(ocUsage)}`);
+    }
+  }
+}
+
+function toNumber(object: unknown): number {
+  return typeof object === "number" ? object : 0;
 }
 
 type MessageEvent = {
@@ -729,7 +777,7 @@ function buildAssistantAndToolCallEvents(msg: OcMessage, state: MessageEventStat
     return events;
   }
   if (typeof msg.content === "string") {
-    const assistantEvent = buildAssistantEvent(msg, state);
+    const assistantEvent = buildAssistantEvent(msg as OcAssistantTextMessage, state);
     if (assistantEvent) {
       events.push({
         stream: "assistant",
@@ -741,35 +789,57 @@ function buildAssistantAndToolCallEvents(msg: OcMessage, state: MessageEventStat
     }
     return events;
   }
-  const msgContent = msg.content[0];
-  if (!msgContent || msgContent.type !== "toolCall") {
-    return events;
+  for (const itemContent of msg.content) {
+    if (itemContent && itemContent.type === "text") {
+      const textItem = itemContent as OcAssistantTextItem;
+      const text = textItem.text;
+      if (!text || text === state.lastChunk) continue;
+      const delta = state.emittedSnapshot.length > 0 ? `\n\n${text}` : text;
+      if (!delta.trim()) continue;
+      const snapshot = state.emittedSnapshot + delta;
+      const assistantData = {
+        text,
+        data: { text: snapshot, delta, phase: "text" },
+        lastChunk: text,
+        emittedSnapshot: snapshot,
+      };
+      events.push({
+        stream: "assistant",
+        data: assistantData.data,
+        text: assistantData.text,
+        lastChunk: assistantData.lastChunk,
+        emittedSnapshot: assistantData.emittedSnapshot,
+      });
+    }
+    if (itemContent && itemContent.type === "toolCall") {
+      const toolCallItem = itemContent as OcAssitantToolCallItem;
+      embeddedAgentLog.debug(
+        `[tool] starting to call tool, callName: ${toolCallItem.id}, callId: ${toolCallItem.id}, args: ${JSON.stringify(toolCallItem.arguments)}`,
+      );
+      events.push({
+        stream: "tool",
+        data: {
+          phase: "start",
+          name: toolCallItem.name,
+          toolCallId: toolCallItem.id,
+          args: toolCallItem.arguments,
+        },
+      });
+      events.push({
+        stream: "item",
+        data: {
+          itemId: `tool:${toolCallItem.id}`,
+          phase: "start",
+          kind: "tool",
+          title: toolCallItem.name,
+          status: "running",
+          name: toolCallItem.name,
+          toolCallId: toolCallItem.id,
+          startedAt: Date.now(),
+        },
+      });
+    }
   }
-  embeddedAgentLog.debug(
-    `[tool-bridge] starting to call tool, callId: ${msg.toolCallId}, args: ${JSON.stringify(msgContent.arguments)}`,
-  );
-  events.push({
-    stream: "tool",
-    data: {
-      phase: "start",
-      name: msgContent.name,
-      toolCallId: msg.toolCallId,
-      args: msgContent.arguments,
-    },
-  });
-  events.push({
-    stream: "item",
-    data: {
-      itemId: `tool:${msg.toolCallId}`,
-      phase: "start",
-      kind: "tool",
-      title: msgContent.name,
-      status: "running",
-      name: msgContent.name,
-      toolCallId: msg.toolCallId,
-      startedAt: Date.now(),
-    },
-  });
   return events;
 }
 
