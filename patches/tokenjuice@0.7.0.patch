@@ -1,0 +1,41 @@
+diff --git a/dist/core/text.js b/dist/core/text.js
+index 906b8a1b54c33de2164441616aec2a599a0a19ba..6b0ee98c8223ad8b232734168e8e30efb8e5fe26 100644
+--- a/dist/core/text.js
++++ b/dist/core/text.js
+@@ -8,9 +8,7 @@ const TRUNCATION_SUFFIX = "\n... truncated ...";
+ const MIDDLE_TRUNCATION_MARKER = "\n... omitted ...\n";
+ const COMBINING_MARK_PATTERN = /\p{Mark}/u;
+ const EMOJI_PATTERN = /\p{Extended_Pictographic}/u;
+-const graphemeSegmenter = typeof Intl !== "undefined" && "Segmenter" in Intl
+-    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+-    : null;
++const graphemeSegmenter = null;
+ function graphemes(text) {
+     if (!graphemeSegmenter) {
+         return Array.from(text);
+diff --git a/dist/hosts/opencode/extension/runtime.js b/dist/hosts/opencode/extension/runtime.js
+index f4c4b47fbccb270b0a6c714638b9914d1b9cd984..bf36f1f2cd3a99fb9d986d578d185bcbbd3245a2 100644
+--- a/dist/hosts/opencode/extension/runtime.js
++++ b/dist/hosts/opencode/extension/runtime.js
+@@ -988,7 +988,7 @@ var TRUNCATION_SUFFIX = "\n... truncated ...";
+ var MIDDLE_TRUNCATION_MARKER = "\n... omitted ...\n";
+ var COMBINING_MARK_PATTERN = new RegExp("\\p{Mark}", "u");
+ var EMOJI_PATTERN = new RegExp("\\p{Extended_Pictographic}", "u");
+-var graphemeSegmenter = typeof Intl !== "undefined" && "Segmenter" in Intl ? new Intl.Segmenter(void 0, { granularity: "grapheme" }) : null;
++var graphemeSegmenter = null;
+ function graphemes(text) {
+   if (!graphemeSegmenter) {
+     return Array.from(text);
+diff --git a/dist/hosts/pi/extension/runtime.js b/dist/hosts/pi/extension/runtime.js
+index afd4904fd58442269681bbd3a49b4005cf6825a0..619cf31c31f6e9a347f919cef36dc54350d60480 100644
+--- a/dist/hosts/pi/extension/runtime.js
++++ b/dist/hosts/pi/extension/runtime.js
+@@ -988,7 +988,7 @@ var TRUNCATION_SUFFIX = "\n... truncated ...";
+ var MIDDLE_TRUNCATION_MARKER = "\n... omitted ...\n";
+ var COMBINING_MARK_PATTERN = new RegExp("\\p{Mark}", "u");
+ var EMOJI_PATTERN = new RegExp("\\p{Extended_Pictographic}", "u");
+-var graphemeSegmenter = typeof Intl !== "undefined" && "Segmenter" in Intl ? new Intl.Segmenter(void 0, { granularity: "grapheme" }) : null;
++var graphemeSegmenter = null;
+ function graphemes(text) {
+   if (!graphemeSegmenter) {
+     return Array.from(text);
