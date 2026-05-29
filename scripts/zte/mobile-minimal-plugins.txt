@@ -19,6 +19,7 @@ kimi-coding
 model-config-generic
 moonshot
 openai
+unixsocket
 volcengine
 
 # ---- user features ----
