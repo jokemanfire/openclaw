@@ -139,7 +139,11 @@ function toUnifiedTool(
       const preparedArgs =
         tool.prepareArguments?.(args) ?? (args === null || args === undefined ? {} : args);
       try {
+        embeddedAgentLog.debug(
+          `[tool-bridge] toUnifiedTool starting to call tool, callId: ${callId}}`,
+        );
         const result = await tool.execute(callId, preparedArgs, signal);
+        embeddedAgentLog.debug(`[tool-bridge] toUnifiedTool end to call tool, callId: ${callId}}`);
         sdkLog.info("[tool-bridge] result:", result);
         return result;
       } catch (error) {
@@ -253,7 +257,11 @@ export async function buildToolBridgeHandle(
         );
         let rawResult: unknown;
         try {
+          embeddedAgentLog.debug(
+            `[tool-bridge] **** starting to call tool, callId: ${toolCallId}}`,
+          );
           rawResult = await tool.execute(toolCallId, preparedArgs, toolSignal);
+          embeddedAgentLog.debug(`[tool-bridge] **** end to call tool, callId: ${toolCallId}}`);
         } catch (execError) {
           if (toolSignal.aborted) {
             embeddedAgentLog.warn(
