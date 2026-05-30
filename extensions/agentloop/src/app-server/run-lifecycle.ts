@@ -1067,43 +1067,64 @@ function transferOCMessagesToCCMessages(ocMessages: AgentMessage[] | undefined):
   const result: SDKMessage[] = [];
   if (!ocMessages || ocMessages.length === 0) return result;
 
-  let i = 0;
-  while (i < ocMessages.length) {
-    const msg = ocMessages[i]!;
-    const role = msg.role;
-
+  for (const ocMsg of ocMessages) {
+    const role = ocMsg.role;
     if (role === "user") {
       // user 文字消息 → CC user
       result.push({
         type: "user",
         message: {
           role: "user",
-          content: typeof msg.content === "string" ? msg.content : "",
+          content: typeof ocMsg.content === "string" ? ocMsg.content : "",
         },
-        timestamp: typeof msg.timestamp === "number" ? msg.timestamp : Date.now(),
+        timestamp: typeof ocMsg.timestamp === "number" ? ocMsg.timestamp : Date.now(),
       } as SDKMessage);
     }
     if (role === "assistant") {
-      const blocks: Record<string, unknown>[] = [];
-      if (typeof msg.content === "string") {
-        blocks.push({
-          type: "text",
-          text: msg.content,
-        });
-      }
-      if (blocks.length > 0) {
+      if (typeof ocMsg.content === "string") {
         result.push({
           type: "assistant",
           message: {
             role: "assistant",
             type: "message",
-            content: blocks,
+            content: [
+              {
+                type: "text",
+                text: ocMsg.content,
+              },
+            ],
           },
-          timestamp: typeof msg.timestamp === "number" ? msg.timestamp : Date.now(),
+          timestamp: typeof ocMsg.timestamp === "number" ? ocMsg.timestamp : Date.now(),
         } as SDKMessage);
+        continue;
+      }
+      const contentBlocks = ocMsg.content;
+      if (!Array.isArray(contentBlocks) || contentBlocks.length === 0) {
+        continue;
+      }
+      for (const contentItem of contentBlocks) {
+        if (
+          contentItem.type === "text" &&
+          typeof contentItem.text === "string" &&
+          contentItem.text.trim().length > 0
+        ) {
+          result.push({
+            type: "assistant",
+            message: {
+              role: "assistant",
+              type: "message",
+              content: [
+                {
+                  type: "text",
+                  text: contentItem.text,
+                },
+              ],
+            },
+            timestamp: typeof ocMsg.timestamp === "number" ? ocMsg.timestamp : Date.now(),
+          } as SDKMessage);
+        }
       }
     }
-    i++;
   }
   return result;
 }
