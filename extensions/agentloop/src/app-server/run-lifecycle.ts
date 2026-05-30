@@ -225,12 +225,41 @@ export async function sendAgentLoopAttempt(
   const loop = createLoopById(agentId, appManifest);
   embeddedAgentLog.info(`[agentloop] loop.run config=${JSON.stringify(appManifest)}`);
 
-  const toolBridge = await buildToolBridgeHandle({
-    ...params,
+  const attemptStartedAt = Date.now();
+  const hookCtx = {
+    runId: params.runId,
     agentId,
-    signal: session.signal,
-    toolTimeoutMs: session.resolvedConfig.toolTimeoutMs,
-  } as Parameters<typeof buildToolBridgeHandle>[0]);
+    sessionKey: params.sessionKey,
+    sessionId: params.sessionId,
+    workspaceDir: params.workspaceDir,
+  };
+
+  // Phase 1: tool bridge, prompt resolution, and session history are independent
+  const [toolBridge, promptBuildResult, historyMessages] = await Promise.all([
+    buildToolBridgeHandle({
+      ...params,
+      agentId,
+      signal: session.signal,
+      toolTimeoutMs: session.resolvedConfig.toolTimeoutMs,
+      toolCacheKey: params as object,
+    } as Parameters<typeof buildToolBridgeHandle>[0]),
+    resolveAgentHarnessBeforePromptBuildResult({
+      prompt: params.prompt,
+      developerInstructions: params.extraSystemPrompt ?? "",
+      messages: [],
+      ctx: {
+        runId: params.runId,
+        agentId,
+        sessionKey: params.sessionKey,
+        sessionId: params.sessionId,
+        workspaceDir: params.workspaceDir,
+        modelProviderId: params.provider,
+        modelId: params.modelId,
+      },
+    }),
+    readSessionHistoryMessages(params.sessionFile).then((msgs) => msgs ?? []),
+  ]);
+
   if (
     toolBridge &&
     "setToolBridge" in loop &&
@@ -242,29 +271,6 @@ export async function sendAgentLoopAttempt(
     embeddedAgentLog.info(`[agentloop] loop.setToolBridge called`);
   }
 
-  const attemptStartedAt = Date.now();
-  const hookCtx = {
-    runId: params.runId,
-    agentId,
-    sessionKey: params.sessionKey,
-    sessionId: params.sessionId,
-    workspaceDir: params.workspaceDir,
-  };
-
-  const promptBuildResult = await resolveAgentHarnessBeforePromptBuildResult({
-    prompt: params.prompt,
-    developerInstructions: params.extraSystemPrompt ?? "",
-    messages: [],
-    ctx: {
-      runId: params.runId,
-      agentId,
-      sessionKey: params.sessionKey,
-      sessionId: params.sessionId,
-      workspaceDir: params.workspaceDir,
-      modelProviderId: params.provider,
-      modelId: params.modelId,
-    },
-  });
   const effectivePrompt = promptBuildResult.prompt;
   const effectiveExtraSystemPrompt = promptBuildResult.developerInstructions;
 
@@ -272,8 +278,7 @@ export async function sendAgentLoopAttempt(
 
   const ocHookBridge = createOcHookBridge(hookCtx);
 
-  let historyMessages = (await readSessionHistoryMessages(params.sessionFile)) ?? [];
-
+  // Phase 2: build loop options (depends on prompt resolution and history)
   const loopOptions = await buildLoopOptions(
     session,
     agentId,
@@ -281,6 +286,7 @@ export async function sendAgentLoopAttempt(
     {
       extraSystemPrompt: effectiveExtraSystemPrompt,
       ocHookBridge,
+      toolCacheKey: params as object,
     },
     historyMessages,
   );
@@ -986,7 +992,7 @@ async function buildLoopOptions(
   session: AgentLoopSession,
   agentId: string,
   appManifest: import("./loop-registry.js").AppManifest,
-  overrides?: { extraSystemPrompt?: string; ocHookBridge?: OcHookBridge },
+  overrides?: { extraSystemPrompt?: string; ocHookBridge?: OcHookBridge; toolCacheKey?: object },
   historyMessages?: AgentMessage[],
 ): Promise<Partial<LoopOptions>> {
   const { params } = session;
@@ -995,6 +1001,7 @@ async function buildLoopOptions(
     ...params,
     agentId,
     toolTimeoutMs: session.resolvedConfig.toolTimeoutMs,
+    ...(overrides?.toolCacheKey ? { toolCacheKey: overrides.toolCacheKey } : {}),
   } as Parameters<typeof buildToolDefinitions>[0]);
 
   embeddedAgentLog.info(
